@@ -10,7 +10,7 @@
 | 阶段 2 | 技术方案设计 | ✅ 已完成 | 资深软件架构师 | docs/TECHNICAL_DESIGN.md | v1.1.1，零知识加密架构 + 8 条 ADR + 恢复码数据恢复方案（v1.1.1 修正 salt 16B + libsodium-sumo） |
 | 阶段 3 | 任务拆分与开发排期 | ✅ 已完成 | 资深软件架构师 | docs/TASK_BREAKDOWN.md | v1.0.0，6 阶段 / 40 原子任务 / 27.5 人天 |
 | 阶段 4 | 测试策略与 Checklist | ✅ 已完成（待评审） | 资深软件架构师 | docs/TEST_STRATEGY.md | v1.0.0，测试金字塔 70/20/10 + 4 个 TDD 骨架 + M0-M6 验收清单 + 43 项安全测试 + 40 任务映射 |
-| 阶段 5 | 开发与单元测试 | 🔄 进行中 | 开发工程师 | — | T1.1 已完成，按 TASK_BREAKDOWN 顺序执行 |
+| 阶段 5 | 开发与单元测试 | 🔄 进行中 | 开发工程师 | — | T1.1-T1.2 已完成，按 TASK_BREAKDOWN 顺序执行 |
 | 阶段 6 | 集成测试与验收 | ⏳ 未开始 | — | — | |
 | 阶段 7 | 评审、合并与状态更新 | ⏳ 未开始 | — | — | |
 
@@ -67,7 +67,7 @@
 | 编号 | 子任务 | 状态 | 产出 |
 |------|--------|------|------|
 | T1.1 | 项目脚手架初始化与依赖安装 | ✅ 完成 | Next.js 16.2.10 + Tailwind v3 + shadcn/ui（7 组件）+ 全量依赖；tsc/eslint 零错误；dev server HTTP 200 |
-| T1.2 | 数据库连接池单例 | ⏳ 待开始 | — |
+| T1.2 | 数据库连接池单例 | ✅ 完成 | src/lib/db.ts (Pool 单例, max:10, globalThis 防重复) + db.test.ts (7 测试全通过) + vitest.config.ts + .env.test |
 | T1.3 | 数据库 DDL 迁移脚本 | ⏳ 待开始 | — |
 | T1.4 | 全局类型定义 | ⏳ 待开始 | — |
 | T1.5 | 根布局与主题系统 | ⏳ 待开始 | — |
@@ -100,3 +100,4 @@
 | 2026-07-02 | 阶段 3 状态确认为「已完成」；阶段 4（测试策略与 Checklist）产出 TEST_STRATEGY.md v1.0.0，标记为「已完成（待评审）」。核心产出：测试金字塔（70% 单元 / 20% 集成 / 10% E2E）、Vitest 工具选型（十维对比胜出 Jest）、覆盖率目标（加密层 100%/95%/100%、整体 80%/70%/80%）、4 套 TDD 可执行骨架（crypto/auth/items 单元 + register-login E2E 含网络拦截零知识验证）、M0-M6 共 71 项里程碑验收检查点、43 项安全测试矩阵（ZK/CR/AU/注入防护）、性能基线（Argon2id <2s / 批量解密 1000 条 <1s）、40 任务全量测试文件映射、11 个 TDD-first 任务标注、CI 流水线与覆盖率门禁建议 | 资深软件架构师 |
 | 2026-07-02 | 阶段 5（开发与单元测试）启动；技术方案修正 v1.1.0 → v1.1.1（CLAUDE.md 规定开发期发现方案有误须立即回退更新）：① KDF salt 32B → 16B（crypto_pwhash_SALTBYTES）；② libsodium-wrappers → libsodium-wrappers-sumo（精简版无 crypto_pwhash）；③ memLimit 单位说明（字节，65536*1024=67108864）。影响：3.2 参数表 / 3.5 KDF 示例 / DDL / API 契约 / 数据流图 / 10.1 选型表 / ADR-002 / 摘要 | 开发工程师 |
 | 2026-07-02 | T1.1 项目脚手架初始化与依赖安装 ✅ 完成。产出：Next.js 16.2.10 (Turbopack) + React 19.2.4 + TypeScript strict + Tailwind CSS v3 + shadcn/ui new-york（button/input/dialog/form/label/dropdown-menu/sonner 7 组件）+ pg/zustand/react-hook-form/zod/libsodium-wrappers-sumo/bcrypt/jose 等全量依赖；Vitest 4 + Playwright + Testing Library 测试工具链；.env.local + .env.example。验收：tsc --noEmit 零错误 / eslint 零错误 / dev server HTTP 200（177ms 启动） | 开发工程师 |
+| 2026-07-02 | T1.2 数据库连接池单例 ✅ 完成。产出：src/lib/db.ts（pg.Pool 单例, max:10, globalThis.__db 防热重载重复实例化）；vitest.config.ts（jsdom + React plugin + @ 路径别名 + 覆盖率配置）；tests/setup.ts（dotenv 加载 .env.test + jest-dom matchers）；src/lib/db.test.ts（7 集成测试全通过：max:10 配置 / SELECT 1 / 参数化查询 / 当前数据库验证 / globalThis 单例）；.env.test（passbox_test 数据库）。PostgreSQL 18.4 已运行。验收：M0-3 通过 | 开发工程师 |
