@@ -62,75 +62,84 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: '请求体不是合法 JSON' }, { status: 400 });
   }
 
-  const parsed = recoverSchema.safeParse(body);
-  if (!parsed.success) {
+  try {
+    const parsed = recoverSchema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: parsed.error.issues[0]?.message ?? '请求参数无效', code: 'INVALID_PARAMS' },
+        { status: 400 },
+      );
+    }
+
+    const { email, recoveryCode, newAuthHash, newEncryptedKey, newKdfSalt, newKdfParams } =
+      parsed.data;
+    const emailNormalized = email.toLowerCase();
+
+    const result = await db.query(
+      'SELECT id, email, recovery_code_hash FROM users WHERE email_normalized = $1',
+      [emailNormalized],
+    );
+
+    // 防枚举：邮箱不存在时执行 dummy bcrypt 均衡时间
+    if (result.rows.length === 0) {
+      await bcrypt.compare(recoveryCode, DUMMY_RECOVERY_HASH);
+      return NextResponse.json(
+        { error: INVALID_RECOVERY_ERROR, code: 'INVALID_RECOVERY_CODE' },
+        { status: 401 },
+      );
+    }
+
+    const user = result.rows[0];
+
+    const isMatch = await bcrypt.compare(recoveryCode, user.recovery_code_hash as string);
+    if (!isMatch) {
+      return NextResponse.json(
+        { error: INVALID_RECOVERY_ERROR, code: 'INVALID_RECOVERY_CODE' },
+        { status: 401 },
+      );
+    }
+
+    // 验证通过：重置主密码相关字段
+    const newpasswordHash = await bcrypt.hash(newAuthHash, 10);
+
+    await db.query(
+      `UPDATE users
+       SET password_hash = $1,
+           encrypted_key = $2,
+           kdf_salt = $3,
+           kdf_memory_kib = $4,
+           kdf_iterations = $5,
+           kdf_parallelism = $6,
+           failed_login_attempts = 0,
+           locked_until = NULL,
+           updated_at = NOW()
+       WHERE id = $7`,
+      [
+        newpasswordHash,
+        JSON.stringify(newEncryptedKey),
+        Buffer.from(newKdfSalt, 'base64'),
+        newKdfParams.memoryKib,
+        newKdfParams.iterations,
+        newKdfParams.parallelism,
+        user.id,
+      ],
+    );
+
+    // 签发新会话
+    const token = await createSession(user.id as string, user.email as string);
+
+    const response: RecoverResponse = {
+      user: { id: user.id as string, email: user.email as string },
+    };
+    const res = NextResponse.json(response, { status: 200 });
+    res.cookies.set(SESSION_COOKIE_NAME, token, SESSION_COOKIE_OPTIONS);
+    return res;
+  } catch (err) {
+    // M-6：兜底未预期异常，避免泄漏内部错误细节
+    console.error('[recover] 未预期错误:', err instanceof Error ? err.message : '未知错误');
     return NextResponse.json(
-      { error: parsed.error.issues[0]?.message ?? '请求参数无效', code: 'INVALID_PARAMS' },
-      { status: 400 },
+      { error: '服务器内部错误', code: 'INTERNAL_ERROR' },
+      { status: 500 },
     );
   }
-
-  const { email, recoveryCode, newAuthHash, newEncryptedKey, newKdfSalt, newKdfParams } =
-    parsed.data;
-  const emailNormalized = email.toLowerCase();
-
-  const result = await db.query(
-    'SELECT id, email, recovery_code_hash FROM users WHERE email_normalized = $1',
-    [emailNormalized],
-  );
-
-  // 防枚举：邮箱不存在时执行 dummy bcrypt 均衡时间
-  if (result.rows.length === 0) {
-    await bcrypt.compare(recoveryCode, DUMMY_RECOVERY_HASH);
-    return NextResponse.json(
-      { error: INVALID_RECOVERY_ERROR, code: 'INVALID_RECOVERY_CODE' },
-      { status: 401 },
-    );
-  }
-
-  const user = result.rows[0];
-
-  const isMatch = await bcrypt.compare(recoveryCode, user.recovery_code_hash as string);
-  if (!isMatch) {
-    return NextResponse.json(
-      { error: INVALID_RECOVERY_ERROR, code: 'INVALID_RECOVERY_CODE' },
-      { status: 401 },
-    );
-  }
-
-  // 验证通过：重置主密码相关字段
-  const newpasswordHash = await bcrypt.hash(newAuthHash, 10);
-
-  await db.query(
-    `UPDATE users
-     SET password_hash = $1,
-         encrypted_key = $2,
-         kdf_salt = $3,
-         kdf_memory_kib = $4,
-         kdf_iterations = $5,
-         kdf_parallelism = $6,
-         failed_login_attempts = 0,
-         locked_until = NULL,
-         updated_at = NOW()
-     WHERE id = $7`,
-    [
-      newpasswordHash,
-      JSON.stringify(newEncryptedKey),
-      Buffer.from(newKdfSalt, 'base64'),
-      newKdfParams.memoryKib,
-      newKdfParams.iterations,
-      newKdfParams.parallelism,
-      user.id,
-    ],
-  );
-
-  // 签发新会话
-  const token = await createSession(user.id as string, user.email as string);
-
-  const response: RecoverResponse = {
-    user: { id: user.id as string, email: user.email as string },
-  };
-  const res = NextResponse.json(response, { status: 200 });
-  res.cookies.set(SESSION_COOKIE_NAME, token, SESSION_COOKIE_OPTIONS);
-  return res;
 }
