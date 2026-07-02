@@ -84,7 +84,20 @@
 | T2.5 | 密钥层级管理（密钥包装） | ✅ 完成 | src/lib/crypto/keys.ts（generateSymmetricKey AES-256 可提取 CryptoKey + importKey 非提取 + encryptSymmetricKey/decryptSymmetricKey Master 路径 + encryptSymmetricKeyWithRecovery/decryptSymmetricKeyWithRecovery Recovery 路径 + 路径专属 AAD MASTER_WRAP_AAD="passbox:symmetric-key:master:v1" / RECOVERY_WRAP_AAD="passbox:symmetric-key:recovery:v1" 域分离 + exportRawKey/importSymmetricKey 内部辅助）+ __tests__/keys.test.ts（11 测试：generateSymmetricKey 类型/可提取/算法/唯一性 + importKey 非提取 + Master 路径往返 + Recovery 路径往返（真实 deriveRecoveryKey）+ 密钥隔离 4 项：Master 不能解 Recovery / Recovery 不能解 Master / 双路径同一 Symmetric Key）；验收：tsc/eslint 零错误 / 11 测试通过 / 全量 114 测试无回归 |
 | T2.6 | 加密核心单元测试 | ✅ 完成 | src/lib/crypto/__tests__/crypto-chain.test.ts（5 端到端集成测试：场景 1 注册流程 KDF→HKDF→密钥生成→双路径包装 / 场景 2 日常使用 登录→解包 Symmetric Key→加解密条目+AAD 绑定验证 / 场景 3 数据恢复 恢复码解包→新主密码重包装 / 场景 4 修改主密码 旧密钥解包→新密钥重包装+历史密文仍可解 / 场景 5 零知识架构验证 服务端可见数据不含明文）+ aes.test.ts 补充 iv/ct 非字符串防御测试（17 测试）；覆盖率：核心加密逻辑 6 文件（encoding/random/kdf/hkdf/aes/keys）语句 100% / 分支 100% / 函数 100%，满足 M1-9；基础设施 gap：kdf.worker.ts（Web Worker 入口，T3.5 接线测试）/ sodium-init.ts 错误重试路径（防御性代码）/ types.ts（纯类型 barrel 无运行时代码）；验收：tsc/eslint 零错误 / 5 集成测试通过 / 全量 120 测试无回归 / M1 里程碑 M1-1~M1-9 全部通过 |
 
-### 阶段 5 · Stage 3-6（T3.1-T6.7）
+### 阶段 5 · Stage 3：认证与账户（T3.1-T3.8）
+
+| 编号 | 子任务 | 状态 | 产出 |
+|------|--------|------|------|
+| T3.1 | 会话管理模块 | ✅ 完成 | src/lib/session.ts（createSession SignJWT HS256 30天过期 + verifySession jwtVerify 验签/过期/无效返回 null + getSession 从 Cookie 读取 + setSessionCookie/clearSessionCookie 通过 next/headers cookies 设置/清除 + SESSION_COOKIE_NAME='passbox_session' + SESSION_MAX_AGE_SECONDS=30*24*3600 + SESSION_COOKIE_OPTIONS httpOnly/secure/sameSite=lax/path=/maxAge=30d）+ __tests__/session.test.ts（19 测试：JWT 签发格式/payload/过期时间/唯一性 + 验签有效/undefined/空串/非JWT/错误签名/过期 + 往返一致 + Cookie 属性 + setSessionCookie/clearSessionCookie 调用验证 + getSession 无Cookie/有效Cookie/无效Cookie）；验收：tsc/eslint 零错误 / 19 测试通过 / session.ts 覆盖率 100%/100%/100%（超 95%/90%/100% 目标）/ 全量 139 测试无回归 |
+| T3.2 | 注册 API | ⏳ 待开始 | — |
+| T3.3 | 预登录/登录/登出/会话查询 API | ⏳ 待开始 | — |
+| T3.4 | 注册页面 UI | ⏳ 待开始 | — |
+| T3.5 | KDF Web Worker 接线 | ⏳ 待开始 | — |
+| T3.6 | 登录/解锁页面 UI | ⏳ 待开始 | — |
+| T3.7 | 自动锁定机制 | ⏳ 待开始 | — |
+| T3.8 | 数据恢复流程 | ⏳ 待开始 | — |
+
+### 阶段 5 · Stage 4-6（T4.1-T6.7）
 
 > 详见 [TASK_BREAKDOWN.md](./docs/TASK_BREAKDOWN.md)，按依赖顺序逐步展开追踪。
 
@@ -111,3 +124,4 @@
 | 2026-07-02 | T2.4 AES-256-GCM 加解密模块 ✅ 完成。产出：aes.ts（encrypt/decrypt 字符串入口 + encryptBytes/decryptToBytes 字节入口供密钥包装复用 + 12B 随机 IV getRandomBytes(AES_GCM_IV_LENGTH) + AAD additionalData 上下文绑定 + assertEncryptedData 版本号 v:1 校验 + GCM 16B auth tag 自动附加 + FORMAT_VERSION=1 as const 满足字面量类型）；__tests__/aes.test.ts（16 测试：字符串往返/无AAD/空串/UTF-8 中文emoji + 格式 v1 iv12B ct base64 + 每次IV不同 + ct长度=明文+16 + AAD不匹配抛错/有AAD无AAD抛错/密文篡改抛错/IV篡改抛错/版本错误抛错/跨密钥抛错 + 字节往返 + 同密钥多次稳定）。.slice() 模式统一用于 WebCrypto BufferSource 类型边界。验收：tsc/eslint 零错误 / 16 测试通过 / 全量 103 测试无回归 | 开发工程师 |
 | 2026-07-02 | T2.5 密钥层级管理（密钥包装）✅ 完成。产出：keys.ts（generateSymmetricKey 256-bit AES-GCM 可提取 CryptoKey / importKey 32B raw → 非提取 CryptoKey 用于 Master/Recovery 路径 / encryptSymmetricKey + decryptSymmetricKey Master 路径 / encryptSymmetricKeyWithRecovery + decryptSymmetricKeyWithRecovery Recovery 路径 / 路径专属 AAD MASTER_WRAP_AAD='passbox:symmetric-key:master:v1' 与 RECOVERY_WRAP_AAD='passbox:symmetric-key:recovery:v1' 实现域分离 / exportRawKey + importSymmetricKey 内部辅助）；__tests__/keys.test.ts（11 测试：generateSymmetricKey 类型=AES-GCM/可提取/length=256/唯一性 + importKey 非提取 + Master 路径往返 + Recovery 路径往返（使用真实 deriveRecoveryKey）+ 密钥隔离 4 项：Master 不能解 Recovery 密文 / Recovery 不能解 Master 密文 / 双路径包装同一 Symmetric Key 解密一致）。关键设计：Master Key 与 Recovery Key 不可交叉解密（路径专属 AAD + 不同密钥），满足 TECHNICAL_DESIGN 3.3.1 恢复码密钥路径安全要求。验收：tsc/eslint 零错误 / 11 测试通过 / 全量 114 测试无回归 | 开发工程师 |
 | 2026-07-02 | T2.6 加密核心单元测试 ✅ 完成。产出：crypto-chain.test.ts（5 端到端集成测试：① 注册流程 KDF→HKDF→密钥生成→双路径包装 ② 日常使用 登录→解包 Symmetric Key→加解密条目+AAD 绑定验证（title/data 不可互换 AAD、不同 itemId 不可解密）③ 数据恢复 主密码丢失→恢复码派生 Recovery Key→解包 Symmetric Key→验证历史数据可解→新主密码重包装 ④ 修改主密码 旧密钥解包→新密钥重包装+3 个历史条目仍可解+旧/新密文不可交叉解密 ⑤ 零知识架构验证 模拟数据库泄露场景，断言服务端可见数据不含主密码/Symmetric Key/条目明文/恢复码）；aes.test.ts 补充 iv/ct 非字符串防御测试（17 测试）；覆盖率报告：核心加密逻辑 6 文件（encoding/random/kdf/hkdf/aes/keys）语句 100% / 分支 100% / 函数 100%，满足 M1-9；基础设施文件 gap（已记录）：kdf.worker.ts 0%（Web Worker 入口，T3.5 接线集成测试）/ sodium-init.ts 71.42%（错误重试路径，防御性代码）/ types.ts 0%（纯类型 barrel 无运行时代码）。验收：tsc/eslint 零错误 / 5 集成测试通过 / 全量 120 测试无回归 / M1 里程碑 M1-1~M1-9 全部通过。**Stage 2 加密核心全部完成，M1 里程碑达成** | 开发工程师 |
+| 2026-07-02 | T3.1 会话管理模块 ✅ 完成。产出：session.ts 扩展（在 T1.6 verifySession/getSession 基础上新增：createSession(userId, email) 使用 jose SignJWT HS256 签发 30 天过期 JWT / SESSION_MAX_AGE_SECONDS=30\*24\*3600 常量 / SESSION_COOKIE_OPTIONS={httpOnly:true, secure:true, sameSite:'lax', path:'/', maxAge:30d} Cookie 安全属性 / setSessionCookie(token) 通过 next/headers cookies().set 设置 / clearSessionCookie() 通过 maxAge=0 清除）；__tests__/session.test.ts（19 测试 TDD：JWT 签发格式三段base64/payload含sub+email/过期时间30天/唯一性 + 验签有效token/undefined/空串/非JWT格式/错误签名/过期token + 签发验签往返一致 + SESSION_COOKIE_NAME/SESSION_COOKIE_OPTIONS/SESSION_MAX_AGE_SECONDS 属性验证 + setSessionCookie/clearSessionCookie 调用验证 + getSession 无Cookie/有效Cookie/无效Cookie）；vi.mock('next/headers') mock cookies() 测试 Cookie 操作。验收：tsc/eslint 零错误 / 19 测试通过 / session.ts 覆盖率 100%/100%/100%（超 TEST_STRATEGY 目标 95%/90%/100%）/ 全量 139 测试无回归。**Stage 3 认证与账户启动** | 开发工程师 |

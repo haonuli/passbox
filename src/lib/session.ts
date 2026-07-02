@@ -1,16 +1,47 @@
-import { cookies } from 'next/headers';
-import { jwtVerify, type JWTPayload } from 'jose';
-
 /**
- * 会话 Cookie 名称。
+ * 会话管理模块 (T3.1)
  *
- * 注意：Cookie 属性（HttpOnly + Secure + SameSite=Lax + 30 天）在 T3.1 注册/登录接口中设置。
- * 此处仅定义名称供中间件与 Server Component 读取。
+ * 使用 jose 库实现 JWT 会话：签发（createSession）、验签（verifySession）、
+ * Cookie 设置（setSessionCookie）与清除（clearSessionCookie）。
+ *
+ * JWT Payload：{ sub: user_id, email, iat, exp }
+ * Cookie 属性：HttpOnly + Secure + SameSite=Lax + 30 天过期 + Path=/
+ *
+ * 设计要点：
+ * - jose 兼容 Edge Runtime（中间件可用），无需 Node.js crypto
+ * - JWT_SECRET 从环境变量读取，运行时为 UTF-8 字符串，jose 需转换为 Uint8Array
+ * - 会话 Cookie 仅存 JWT 字符串，不存任何加密密钥或明文数据
+ *
+ * 对应 TECHNICAL_DESIGN.md 3.4 节（简化零知识认证方案）+ ADR-008（JWT 会话）。
  */
+import { cookies } from 'next/headers';
+import { SignJWT, jwtVerify, type JWTPayload } from 'jose';
+
+/** 会话 Cookie 名称 */
 export const SESSION_COOKIE_NAME = 'passbox_session';
 
+/** 会话最大存活时间（秒）：30 天 */
+export const SESSION_MAX_AGE_SECONDS = 30 * 24 * 60 * 60;
+
 /**
- * JWT 签名密钥（从环境变量读取，运行时为 UTF-8 字符串，jose 需转换为 Uint8Array）。
+ * 会话 Cookie 属性。
+ * - httpOnly: true  — 防止 JS 读取（防 XSS 窃取）
+ * - secure: true    — 仅 HTTPS 传输
+ * - sameSite: 'lax' — 防 CSRF（允许顶层导航携带）
+ * - path: '/'       — 全站有效
+ * - maxAge: 30 天   — 浏览器持久化（非会话级）
+ */
+export const SESSION_COOKIE_OPTIONS = {
+  httpOnly: true,
+  secure: true,
+  sameSite: 'lax' as const,
+  path: '/',
+  maxAge: SESSION_MAX_AGE_SECONDS,
+};
+
+/**
+ * JWT 签名密钥（从环境变量读取，jose 需 Uint8Array）。
+ * ⚠️ 生产环境必须设置强随机值（≥32 字节）。
  */
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET);
 
@@ -23,10 +54,25 @@ export interface SessionPayload extends JWTPayload {
 }
 
 /**
+ * 签发 JWT 会话令牌。
+ *
+ * @param userId 用户 ID（UUID，存入 sub）
+ * @param email 用户邮箱（用于前端展示，不用于鉴权决策）
+ * @returns 签名的 JWT 字符串（HS256，30 天过期）
+ */
+export async function createSession(userId: string, email: string): Promise<string> {
+  return new SignJWT({ email })
+    .setProtectedHeader({ alg: 'HS256' })
+    .setSubject(userId)
+    .setIssuedAt()
+    .setExpirationTime(`${SESSION_MAX_AGE_SECONDS}s`)
+    .sign(JWT_SECRET);
+}
+
+/**
  * 验证 JWT 并返回 Payload。验签失败或过期时返回 null。
  *
  * 用于中间件（Edge Runtime）和 Server Component（Node Runtime）。
- * jose 库兼容 Edge Runtime，无需 Node.js crypto 模块。
  */
 export async function verifySession(token: string | undefined): Promise<SessionPayload | null> {
   if (!token) return null;
@@ -47,4 +93,30 @@ export async function getSession(): Promise<SessionPayload | null> {
   const cookieStore = await cookies();
   const token = cookieStore.get(SESSION_COOKIE_NAME)?.value;
   return verifySession(token);
+}
+
+/**
+ * 设置会话 Cookie（Server Component / Server Action 用）。
+ *
+ * Route Handler 请使用 response.cookies.set(SESSION_COOKIE_NAME, token, SESSION_COOKIE_OPTIONS)。
+ *
+ * @param token createSession 返回的 JWT 字符串
+ */
+export async function setSessionCookie(token: string): Promise<void> {
+  const cookieStore = await cookies();
+  cookieStore.set(SESSION_COOKIE_NAME, token, SESSION_COOKIE_OPTIONS);
+}
+
+/**
+ * 清除会话 Cookie（登出用）。
+ *
+ * 通过设置 maxAge=0 使浏览器立即删除 Cookie。
+ * 保留 httpOnly/secure/sameSite 属性确保清除过程安全。
+ */
+export async function clearSessionCookie(): Promise<void> {
+  const cookieStore = await cookies();
+  cookieStore.set(SESSION_COOKIE_NAME, '', {
+    ...SESSION_COOKIE_OPTIONS,
+    maxAge: 0,
+  });
 }
