@@ -29,6 +29,19 @@ import type { KdfConfig, KdfParams } from './types';
 export const MASTER_KEY_LENGTH = 32;
 
 /**
+ * KDF 参数最低安全阈值（M-8 修复）。
+ *
+ * 威胁模型：若服务端返回的 KDF 参数可被降级（如 memoryKib=1），
+ * 客户端用弱参数派生 Master Key → authHash 易被离线暴力破解。
+ * 因此客户端与服务端均强制最低阈值，拒绝过弱参数。
+ *
+ * 阈值依据：低于 16 MiB 内存硬度或 2 轮迭代对密码管理器不可接受。
+ */
+export const MIN_KDF_MEMORY_KIB = 16384; // 16 MiB
+export const MIN_KDF_ITERATIONS = 2;
+export const MIN_KDF_PARALLELISM = 1;
+
+/**
  * 默认 KDF 参数（对应 TECHNICAL_DESIGN 3.2 推荐配置）。
  * 用于注册时写入 users 表的 kdf_* 字段，及 prelogin/login 响应。
  */
@@ -83,6 +96,18 @@ export async function deriveMasterKey(
   if (config.salt.length !== saltBytes) {
     throw new Error(
       `KDF salt 长度必须为 ${saltBytes} 字节 (crypto_pwhash_SALTBYTES)，收到 ${config.salt.length}`,
+    );
+  }
+
+  // M-8 修复：强制 KDF 参数最低阈值，拒绝降级攻击
+  if (config.memoryCost < MIN_KDF_MEMORY_KIB) {
+    throw new Error(
+      `KDF memoryCost 不得低于 ${MIN_KDF_MEMORY_KIB} KiB，收到 ${config.memoryCost}`,
+    );
+  }
+  if (config.timeCost < MIN_KDF_ITERATIONS) {
+    throw new Error(
+      `KDF timeCost 不得低于 ${MIN_KDF_ITERATIONS}，收到 ${config.timeCost}`,
     );
   }
 

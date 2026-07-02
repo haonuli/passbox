@@ -10,7 +10,7 @@
  * 各模块的单元测试（kdf/hkdf/aes/keys）已覆盖边界与异常场景；
  * 本文件聚焦「模块组合正确性」与「真实业务流端到端可工作」。
  *
- * 使用 FAST_PARAMS（8MiB/1）保持测试速度；完整参数 64MiB/3 已在 kdf.test.ts 验证。
+ * 使用 FAST_PARAMS（M-8 最低阈值 16MiB/2）保持测试速度；完整参数 64MiB/3 已在 kdf.test.ts 验证。
  */
 // @vitest-environment node
 import { describe, it, expect } from 'vitest';
@@ -28,11 +28,11 @@ import { getRandomBytes } from '../random';
 import { toBase64 } from '../encoding';
 import type { EncryptedData } from '../types';
 
-// 测试用快速 KDF 参数（保持可复现 + 快速）；完整参数 64MiB/3 见 kdf.test.ts
+// 测试用快速 KDF 参数（M-8 最低阈值：16MiB/2，保持可复现 + 快速）；完整参数 64MiB/3 见 kdf.test.ts
 const FAST_PARAMS = {
   type: 'argon2id' as const,
-  memoryKib: 8192, // 8 MiB
-  iterations: 1,
+  memoryKib: 16384, // 16 MiB（M-8 最低阈值）
+  iterations: 2,
   parallelism: 4,
 };
 

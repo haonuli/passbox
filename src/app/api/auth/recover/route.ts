@@ -22,6 +22,7 @@ import { z } from 'zod';
 import bcrypt from 'bcrypt';
 import { db } from '@/lib/db';
 import { isValidRecoveryCodeFormat } from '@/lib/recovery-code';
+import { encryptedDataSchema, kdfParamsSchema, kdfSaltSchema } from '@/lib/schemas';
 import {
   createSession,
   SESSION_COOKIE_NAME,
@@ -32,19 +33,12 @@ import type { RecoverResponse } from '@/types/api';
 /** 防枚举用的 dummy bcrypt 哈希（模块加载时生成一次） */
 const DUMMY_RECOVERY_HASH = bcrypt.hashSync('dummy-recovery-code-for-timing', 10);
 
-const encryptedDataSchema = z.object({
-  v: z.literal(1),
-  iv: z.string().min(1),
-  ct: z.string().min(1),
-});
-
-const kdfParamsSchema = z.object({
-  type: z.literal('argon2id'),
-  memoryKib: z.number().int().positive(),
-  iterations: z.number().int().positive(),
-  parallelism: z.number().int().positive(),
-});
-
+/**
+ * 恢复重置请求 zod schema
+ *
+ * M-7：newKdfSalt 强制 base64 + 16 字节校验
+ * M-8：newKdfParams 强制最低安全阈值
+ */
 const recoverSchema = z.object({
   email: z.string().trim().email('邮箱格式无效'),
   recoveryCode: z
@@ -53,7 +47,7 @@ const recoverSchema = z.object({
     .refine(isValidRecoveryCodeFormat, '恢复码格式无效'),
   newAuthHash: z.string().min(1, 'newAuthHash 不能为空'),
   newEncryptedKey: encryptedDataSchema,
-  newKdfSalt: z.string().min(1, 'newKdfSalt 不能为空'),
+  newKdfSalt: kdfSaltSchema,
   newKdfParams: kdfParamsSchema,
 });
 

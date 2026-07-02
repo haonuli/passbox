@@ -27,38 +27,23 @@ import {
   SESSION_COOKIE_OPTIONS,
 } from '@/lib/session';
 import { isValidRecoveryCodeFormat } from '@/lib/recovery-code';
+import { encryptedDataSchema, kdfParamsSchema, kdfSaltSchema } from '@/lib/schemas';
 import type { RegisterResponse } from '@/types/api';
 
 /** bcrypt cost factor。authHash 已经过 Argon2id+HKDF 派生，cost=10 足够纵深防御 */
 const BCRYPT_COST = 10;
 
 /**
- * 加密数据 zod schema（对应 EncryptedData { v:1, iv, ct }）
- */
-const encryptedDataSchema = z.object({
-  v: z.literal(1),
-  iv: z.string().min(1),
-  ct: z.string().min(1),
-});
-
-/**
- * KDF 参数 zod schema
- */
-const kdfParamsSchema = z.object({
-  type: z.literal('argon2id'),
-  memoryKib: z.number().int().positive(),
-  iterations: z.number().int().positive(),
-  parallelism: z.number().int().positive(),
-});
-
-/**
  * 注册请求 zod schema
+ *
+ * M-7：kdfSalt 强制 base64 + 16 字节校验
+ * M-8：kdfParams 强制最低安全阈值（memoryKib ≥ 16384, iterations ≥ 2）
  */
 const registerSchema = z.object({
   email: z.string().trim().email('邮箱格式无效'),
   authHash: z.string().min(1, 'authHash 不能为空'),
   encryptedKey: encryptedDataSchema,
-  kdfSalt: z.string().min(1, 'kdfSalt 不能为空'),
+  kdfSalt: kdfSaltSchema,
   kdfParams: kdfParamsSchema,
   recoveryCode: z
     .string()

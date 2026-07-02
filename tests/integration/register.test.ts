@@ -332,6 +332,45 @@ describe('T3.2 注册 API 集成测试', () => {
       expect(response.status).toBe(400);
     });
 
+    // M-7：kdfSalt 必须为合法 base64 且解码为 16 字节
+    it('kdfSalt 非法 base64 返回 400（M-7）', async () => {
+      const response = await POST(
+        makeRequest(makeRegisterBody({ kdfSalt: '!!!not-base64!!!' })),
+      );
+      expect(response.status).toBe(400);
+    });
+
+    it('kdfSalt 解码长度非 16 字节返回 400（M-7）', async () => {
+      // 8 字节 base64
+      const response = await POST(
+        makeRequest(makeRegisterBody({ kdfSalt: 'AAAAAAAAAAAAAA==' })),
+      );
+      expect(response.status).toBe(400);
+    });
+
+    // M-8：KDF 参数不得低于最低安全阈值
+    it('kdfParams.memoryKib 低于 16384 返回 400（M-8）', async () => {
+      const response = await POST(
+        makeRequest(
+          makeRegisterBody({
+            kdfParams: { type: 'argon2id', memoryKib: 1024, iterations: 3, parallelism: 4 },
+          }),
+        ),
+      );
+      expect(response.status).toBe(400);
+    });
+
+    it('kdfParams.iterations 低于 2 返回 400（M-8）', async () => {
+      const response = await POST(
+        makeRequest(
+          makeRegisterBody({
+            kdfParams: { type: 'argon2id', memoryKib: 65536, iterations: 1, parallelism: 4 },
+          }),
+        ),
+      );
+      expect(response.status).toBe(400);
+    });
+
     it('缺少 defaultVaultNameEncrypted 返回 400', async () => {
       const body = makeRegisterBody();
       delete body.defaultVaultNameEncrypted;

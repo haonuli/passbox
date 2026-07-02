@@ -14,8 +14,8 @@ import { getRandomBytes } from '../random';
 const FULL_SALT = generateKdfSalt();
 const FULL_CONFIG = buildKdfConfig(FULL_SALT);
 
-// 加速参数（8MiB / 1）——用于确定性 / 唯一性等不依赖具体强度的用例，保持测试快速
-const FAST_PARAMS = { type: 'argon2id' as const, memoryKib: 8192, iterations: 1, parallelism: 1 };
+// 加速参数（16MiB / 2）——M-8 最低阈值，用于确定性 / 唯一性等不依赖具体强度的用例
+const FAST_PARAMS = { type: 'argon2id' as const, memoryKib: 16384, iterations: 2, parallelism: 1 };
 const FAST_SALT = generateKdfSalt();
 const FAST_CONFIG = buildKdfConfig(FAST_SALT, FAST_PARAMS);
 
@@ -67,6 +67,27 @@ describe('Argon2id 密钥派生 (deriveMasterKey)', () => {
   it('salt 长度错误抛出异常（17 字节）', async () => {
     const badConfig = buildKdfConfig(getRandomBytes(17));
     await expect(deriveMasterKey('test', badConfig)).rejects.toThrow(/salt/);
+  });
+
+  // M-8：KDF 参数最低阈值校验
+  it('memoryCost 低于 16384 KiB 抛出异常（M-8 降级防护）', async () => {
+    const weakConfig = buildKdfConfig(generateKdfSalt(), {
+      type: 'argon2id',
+      memoryKib: 8192,
+      iterations: 2,
+      parallelism: 1,
+    });
+    await expect(deriveMasterKey('test', weakConfig)).rejects.toThrow(/memoryCost/);
+  });
+
+  it('timeCost 低于 2 抛出异常（M-8 降级防护）', async () => {
+    const weakConfig = buildKdfConfig(generateKdfSalt(), {
+      type: 'argon2id',
+      memoryKib: 16384,
+      iterations: 1,
+      parallelism: 1,
+    });
+    await expect(deriveMasterKey('test', weakConfig)).rejects.toThrow(/timeCost/);
   });
 
   it('空密码仍可派生（不抛错，返回 32 字节）', async () => {
