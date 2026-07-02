@@ -10,7 +10,7 @@
 | 阶段 2 | 技术方案设计 | ✅ 已完成 | 资深软件架构师 | docs/TECHNICAL_DESIGN.md | v1.1.1，零知识加密架构 + 8 条 ADR + 恢复码数据恢复方案（v1.1.1 修正 salt 16B + libsodium-sumo） |
 | 阶段 3 | 任务拆分与开发排期 | ✅ 已完成 | 资深软件架构师 | docs/TASK_BREAKDOWN.md | v1.0.0，6 阶段 / 40 原子任务 / 27.5 人天 |
 | 阶段 4 | 测试策略与 Checklist | ✅ 已完成（待评审） | 资深软件架构师 | docs/TEST_STRATEGY.md | v1.0.0，测试金字塔 70/20/10 + 4 个 TDD 骨架 + M0-M6 验收清单 + 43 项安全测试 + 40 任务映射 |
-| 阶段 5 | 开发与单元测试 | 🔄 进行中 | 开发工程师 | — | T1.1-T1.3 已完成，按 TASK_BREAKDOWN 顺序执行 |
+| 阶段 5 | 开发与单元测试 | 🔄 进行中 | 开发工程师 | — | T1.1-T1.4 已完成，按 TASK_BREAKDOWN 顺序执行 |
 | 阶段 6 | 集成测试与验收 | ⏳ 未开始 | — | — | |
 | 阶段 7 | 评审、合并与状态更新 | ⏳ 未开始 | — | — | |
 
@@ -69,7 +69,7 @@
 | T1.1 | 项目脚手架初始化与依赖安装 | ✅ 完成 | Next.js 16.2.10 + Tailwind v3 + shadcn/ui（7 组件）+ 全量依赖；tsc/eslint 零错误；dev server HTTP 200 |
 | T1.2 | 数据库连接池单例 | ✅ 完成 | src/lib/db.ts (Pool 单例, max:10, globalThis 防重复) + db.test.ts (7 测试全通过) + vitest.config.ts + .env.test |
 | T1.3 | 数据库 DDL 迁移脚本 | ✅ 完成 | src/lib/migrate.ts (21 条幂等 DDL: 6 表+9 索引+3 触发器+3 预置数据) + migrate.test.ts (9 集成测试) + scripts/init-test-db.ts + npm run migrate/test:db:setup |
-| T1.4 | 全局类型定义 | ⏳ 待开始 | — |
+| T1.4 | 全局类型定义 | ✅ 完成 | src/types/db.ts (6 Row 类型) + src/types/crypto.ts (EncryptedData/KdfConfig/KdfParams/StrengthResult) + src/types/api.ts (ActionResult/Register/Login/Prelogin/Session + Server Action 输入类型) |
 | T1.5 | 根布局与主题系统 | ⏳ 待开始 | — |
 | T1.6 | 中间件与路由守卫 | ⏳ 待开始 | — |
 
