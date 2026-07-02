@@ -77,11 +77,11 @@
 
 | 编号 | 子任务 | 状态 | 产出 |
 |------|--------|------|------|
-| T2.1 | libsodium 封装与 Argon2id KDF | ⏳ 待开始 | — |
-| T2.2 | HKDF 密钥派生 | ⏳ 待开始 | — |
-| T2.3 | AES-256-GCM 加解密 | ⏳ 待开始 | — |
-| T2.4 | 密钥包装（Master Key 加密 Symmetric Key） | ⏳ 待开始 | — |
-| T2.5 | 恢复码密钥路径 | ⏳ 待开始 | — |
+| T2.1 | 加密类型定义与编码工具 | ✅ 完成 | src/lib/crypto/types.ts (barrel re-export @/types/crypto) + encoding.ts (toBase64/fromBase64 分块 + bytesToString/stringToBytes UTF-8) + random.ts (getRandomBytes 封装 crypto.getRandomValues + 非负整数校验) + __tests__/encoding.test.ts (11 测试) + __tests__/random.test.ts (6 测试)；验收: tsc/eslint 零错误 / 17 测试全通过 / 全量 60 测试无回归 |
+| T2.2 | Argon2id 密钥派生模块 | ⏳ 待开始 | — |
+| T2.3 | HKDF 派生模块 | ⏳ 待开始 | — |
+| T2.4 | AES-256-GCM 加解密模块 | ⏳ 待开始 | — |
+| T2.5 | 密钥层级管理（密钥包装） | ⏳ 待开始 | — |
 | T2.6 | 加密模块集成测试 | ⏳ 待开始 | — |
 
 ### 阶段 5 · Stage 3-6（T3.1-T6.7）
@@ -105,3 +105,4 @@
 | 2026-07-02 | T1.4 全局类型定义 ✅ 完成。产出：src/types/db.ts（6 Row 类型: UserRow/VaultRow/ItemRow/ItemTypesRow/TagRow/ItemTagsRow，含 recovery_encrypted_key + kdf_salt: Buffer）；src/types/crypto.ts（EncryptedData v:1 + KdfConfig salt:Uint8Array + KdfParams API 传输 + StrengthResult）；src/types/api.ts（ActionResult 判别联合 + Register/Login/Prelogin/Session + CreateItemInput/UpdateItemInput）。验收：tsc 零错误 | 开发工程师 |
 | 2026-07-02 | T1.5 根布局与主题系统 ✅ 完成。产出：src/components/theme-provider.tsx（next-themes 封装: attribute=class / defaultTheme=system / enableSystem / disableTransitionOnChange）；src/components/theme-toggle.tsx（DropdownMenu + Sun/Moon 图标, 浅色/深色/跟随系统三选项）；layout.tsx 挂载 ThemeProvider + Toaster（richColors / position=top-center）；page.tsx 替换为 passbox 落地页（主题切换 + toast 测试入口）。验收：tsc/eslint 零错误 / dev server HTTP 200 / 深色模式 CSS 变量正确应用（--background: 240 10% 3.9%, bodyBg: rgb(9,9,11), bodyColor: rgb(250,250,250)）/ Toaster 已挂载（a11y 树 Notifications region 存在）/ 16 测试全通过 | 开发工程师 |
 | 2026-07-02 | T1.6 中间件与路由守卫 ✅ 完成。产出：src/middleware.ts（路由守卫：未认证访问 (app)/* → 307 重定向 /login?redirect=xxx；已认证访问 (auth)/* → 307 重定向 /vault；CSP 11 指令 + X-Frame-Options DENY + X-Content-Type-Options nosniff + Referrer-Policy + Permissions-Policy；matcher 排除静态资源）；src/lib/session.ts（SESSION_COOKIE_NAME='passbox_session' + verifySession JWT 验签 jose + getSession Server Component 辅助）；路由组目录结构（(auth)/login + (auth)/register + (app)/layout 双重保险 redirect + (app)/vault + (app)/unlock + (app)/items/[id] + (app)/items/new + (app)/security + (app)/generator + (app)/settings 共 10 个占位 page.tsx）；tests/integration/middleware.test.ts（27 集成测试：7 受保护路由重定向 + 2 认证路由重定向 + 4 正常放行 + 13 CSP/安全头校验 + 1 matcher 配置）。验收：tsc/eslint 零错误 / dev /vault→307 /login?redirect=%2Fvault / /login→200+CSP 完整 / /register→200 / /settings→307 / 43 测试全通过。M0-7 + M0-8 通过 | 开发工程师 |
+| 2026-07-02 | T2.1 加密类型定义与编码工具 ✅ 完成。产出：src/lib/crypto/types.ts（barrel re-export @/types/crypto，保持单一数据源）；src/lib/crypto/encoding.ts（toBase64 分块 0x8000 避免 fromCharCode.apply 参数上限 / fromBase64 / stringToBytes TextEncoder UTF-8 / bytesToString TextDecoder）；src/lib/crypto/random.ts（getRandomBytes 封装 crypto.getRandomValues + 非负整数校验抛 RangeError）；__tests__/encoding.test.ts（11 测试：空数组/单字节/边界 0x00 0xFF/大数组分块/已知向量 "Hello"→SGVsbG8=/UTF-8 中文 emoji 往返/跨函数组合）+ __tests__/random.test.ts（6 测试：长度/空/随机性/负数 RangeError/Uint8Array 实例/分布烟雾）。加密测试用 `// @vitest-environment node` 确保原生 crypto.subtle。验收：tsc/eslint 零错误 / 17 加密测试通过 / 全量 60 测试无回归。同步修正 Stage 2 追踪表任务名与 TASK_BREAKDOWN 对齐 | 开发工程师 |
