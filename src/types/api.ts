@@ -136,6 +136,56 @@ export interface SessionResponse {
 }
 
 /**
+ * 恢复码验证请求（恢复流程第一阶段）
+ *
+ * 客户端提交邮箱 + 恢复码，服务端 bcrypt.compare 验证后返回
+ * recovery_encrypted_key，客户端用 Recovery Key 解密得到 Symmetric Key。
+ *
+ * ⚠️ 实现偏差（相对 TASK_BREAKDOWN T3.8 API 契约）：
+ * 设计文档仅列出单一 POST /api/auth/recover（重置阶段），但客户端需先获取
+ * recovery_encrypted_key 才能计算 newEncryptedKey。因此拆分为两阶段：
+ *   1. POST /api/auth/recover/verify —— 验证恢复码，返回 recovery_encrypted_key
+ *   2. POST /api/auth/recover       —— 验证恢复码 + 重置主密码
+ * 两阶段均独立 bcrypt 验证恢复码，安全等价。
+ *
+ * @see TECHNICAL_DESIGN.md 3.3.1 恢复码密钥路径
+ */
+export interface RecoverVerifyRequest {
+  email: string;
+  /** "PBOX-XXXX-XXXX-XXXX-XXXX" */
+  recoveryCode: string;
+}
+
+/** 恢复码验证响应 */
+export interface RecoverVerifyResponse {
+  user: { id: string; email: string };
+  /** Recovery Key 加密的 Symmetric Key 副本，客户端解密得到 Symmetric Key */
+  recoveryEncryptedKey: EncryptedData;
+}
+
+/**
+ * 恢复码重置请求（恢复流程第二阶段）
+ * @see TECHNICAL_DESIGN.md 3.3.1
+ */
+export interface RecoverRequest {
+  email: string;
+  /** "PBOX-XXXX-XXXX-XXXX-XXXX"，服务端再次 bcrypt 验证 */
+  recoveryCode: string;
+  /** base64(HKDF(newMasterKey, email, "passbox:auth:v1")) */
+  newAuthHash: string;
+  /** 新 Master Key 加密的 Symmetric Key */
+  newEncryptedKey: EncryptedData;
+  /** base64(16 bytes 新 salt) */
+  newKdfSalt: string;
+  newKdfParams: KdfParams;
+}
+
+/** 恢复码重置响应（设置新会话 Cookie） */
+export interface RecoverResponse {
+  user: { id: string; email: string };
+}
+
+/**
  * API 错误响应（Route Handler 统一格式）
  * @see TECHNICAL_DESIGN.md 5.4
  */

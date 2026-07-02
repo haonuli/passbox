@@ -34,7 +34,7 @@ const PROTECTED_PATHS = ['/vault', '/items', '/security', '/generator', '/settin
  * 已认证用户应跳过的路径（对应 (auth) 路由组）。
  * 已认证用户访问这些路径时重定向到 /vault。
  */
-const AUTH_PATHS = ['/login', '/register'];
+const AUTH_PATHS = ['/login', '/register', '/recover'];
 
 function isProtectedPath(pathname: string): boolean {
   return PROTECTED_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));

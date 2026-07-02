@@ -140,6 +140,16 @@ export function LoginForm() {
               )}
             />
 
+            {/* 忘记主密码 */}
+            <div className="text-right">
+              <Link
+                href="/recover"
+                className="text-sm text-muted-foreground hover:text-primary hover:underline"
+              >
+                忘记主密码？
+              </Link>
+            </div>
+
             {/* 错误提示 */}
             {error && (
               <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">

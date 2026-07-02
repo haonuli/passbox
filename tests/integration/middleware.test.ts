@@ -71,7 +71,7 @@ describe('T1.6 middleware 集成测试', () => {
   });
 
   describe('路由守卫 — 已认证访问认证路由', () => {
-    const authPaths = ['/login', '/register'];
+    const authPaths = ['/login', '/register', '/recover'];
 
     for (const path of authPaths) {
       it(`已认证访问 ${path} → 307 重定向到 /vault`, async () => {
@@ -94,6 +94,12 @@ describe('T1.6 middleware 集成测试', () => {
 
     it('未认证访问 /login → 200（认证页面放行）', async () => {
       const req = createRequest('/login');
+      const res = await middleware(req);
+      expect(res.status).toBe(200);
+    });
+
+    it('未认证访问 /recover → 200（恢复页面放行，无需登录）', async () => {
+      const req = createRequest('/recover');
       const res = await middleware(req);
       expect(res.status).toBe(200);
     });
