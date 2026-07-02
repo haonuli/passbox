@@ -56,10 +56,14 @@ const JWT_SECRET = new TextEncoder().encode(JWT_SECRET_RAW);
 
 /**
  * 会话 JWT 的 Payload 结构。
+ *
+ * M-9 修复：新增 `ver`（token_version）字段，用于服务端撤销。
+ * 登出 / 改密时递增 users.token_version，旧 JWT 的 ver 与 DB 不匹配即失效。
  */
 export interface SessionPayload extends JWTPayload {
   sub: string; // user_id (UUID)
   email: string;
+  ver?: number; // 签发时的 token_version（M-9 撤销机制）
 }
 
 /**
@@ -67,10 +71,11 @@ export interface SessionPayload extends JWTPayload {
  *
  * @param userId 用户 ID（UUID，存入 sub）
  * @param email 用户邮箱（用于前端展示，不用于鉴权决策）
+ * @param ver 签发时的 token_version（M-9 撤销机制，登出/改密递增使旧 token 失效）
  * @returns 签名的 JWT 字符串（HS256，30 天过期）
  */
-export async function createSession(userId: string, email: string): Promise<string> {
-  return new SignJWT({ email })
+export async function createSession(userId: string, email: string, ver: number): Promise<string> {
+  return new SignJWT({ email, ver })
     .setProtectedHeader({ alg: 'HS256' })
     .setSubject(userId)
     .setIssuedAt()

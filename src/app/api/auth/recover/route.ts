@@ -99,10 +99,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       );
     }
 
-    // 验证通过：重置主密码相关字段
+    // 验证通过：重置主密码相关字段，并递增 token_version 撤销所有旧会话（M-9）
     const newpasswordHash = await bcrypt.hash(newAuthHash, 10);
 
-    await db.query(
+    const updateResult = await db.query(
       `UPDATE users
        SET password_hash = $1,
            encrypted_key = $2,
@@ -112,8 +112,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
            kdf_parallelism = $6,
            failed_login_attempts = 0,
            locked_until = NULL,
+           token_version = token_version + 1,
            updated_at = NOW()
-       WHERE id = $7`,
+       WHERE id = $7
+       RETURNING token_version`,
       [
         newpasswordHash,
         JSON.stringify(newEncryptedKey),
@@ -124,9 +126,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         user.id,
       ],
     );
+    const newTokenVersion = updateResult.rows[0].token_version as number;
 
-    // 签发新会话
-    const token = await createSession(user.id as string, user.email as string);
+    // 签发新会话（使用递增后的 token_version）
+    const token = await createSession(user.id as string, user.email as string, newTokenVersion);
 
     const response: RecoverResponse = {
       user: { id: user.id as string, email: user.email as string },

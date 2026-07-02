@@ -154,8 +154,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
     await client.query('COMMIT');
 
-    // 4. 签发会话 JWT 并设置 Cookie
-    const token = await createSession(userId, email.trim());
+    // 4. 签发会话 JWT 并设置 Cookie（新用户 token_version=0，M-9 撤销机制）
+    const token = await createSession(userId, email.trim(), 0);
     const response: RegisterResponse = {
       user: { id: userId, email: email.trim() },
       recoveryCode,

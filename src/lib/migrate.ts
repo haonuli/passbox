@@ -55,10 +55,14 @@ const DDL_SCRIPTS: string[] = [
     failed_login_attempts INTEGER      NOT NULL DEFAULT 0,
     locked_until          TIMESTAMPTZ,
     last_login_at         TIMESTAMPTZ,
+    token_version         INTEGER      NOT NULL DEFAULT 0,
     created_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
     updated_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
     CONSTRAINT users_email_normalized_uk UNIQUE (email_normalized)
   );`,
+
+  // M-9：为已存在的 users 表补充 token_version 列（幂等，CREATE TABLE IF NOT EXISTS 不会添加新列）
+  `ALTER TABLE users ADD COLUMN IF NOT EXISTS token_version INTEGER NOT NULL DEFAULT 0;`,
 
   // 3. vaults（保险库，用户私有）
   `CREATE TABLE IF NOT EXISTS vaults (

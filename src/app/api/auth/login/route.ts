@@ -77,7 +77,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const result = await db.query(
       `SELECT id, email, password_hash, encrypted_key, kdf_salt,
               kdf_memory_kib, kdf_iterations, kdf_parallelism,
-              failed_login_attempts, locked_until, two_factor_enabled
+              failed_login_attempts, locked_until, two_factor_enabled, token_version
        FROM users WHERE email_normalized = $1`,
       [emailNormalized],
     );
@@ -166,8 +166,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       [user.id],
     );
 
-    // 签发会话 Cookie
-    const token = await createSession(user.id as string, user.email as string);
+    // 签发会话 Cookie（携带当前 token_version，M-9 撤销机制）
+    const token = await createSession(
+      user.id as string,
+      user.email as string,
+      user.token_version as number,
+    );
 
     // 构造 LoginResponse（encrypted_key 在 DB 中为 JSON 字符串，解析回对象）
     const encryptedKey = JSON.parse(user.encrypted_key as string) as EncryptedData;

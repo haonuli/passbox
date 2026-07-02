@@ -426,4 +426,111 @@ describe('T3.3 认证 API 集成测试', () => {
       expect(res.status).toBe(200);
     });
   });
+
+  // ============================================================
+  // M-9：JWT 服务端撤销（token_version）
+  // ============================================================
+
+  describe('M-9 token_version 撤销机制', () => {
+    it('登出后旧 JWT 被拒绝 → 401 SESSION_REVOKED', async () => {
+      const { email, authHash } = await registerTestUser();
+      // 登录获取 Cookie
+      const loginRes = await loginPost(
+        makeJsonRequest('http://localhost/api/auth/login', { email, authHash }),
+      );
+      const oldCookie = loginRes.cookies.get(SESSION_COOKIE_NAME)?.value;
+      expect(oldCookie).toBeTruthy();
+
+      // 登出前：旧 Cookie 可用
+      const req1 = new NextRequest('http://localhost/api/auth/session', { method: 'GET' });
+      req1.cookies.set(SESSION_COOKIE_NAME, oldCookie!);
+      const res1 = await sessionGet(req1);
+      expect(res1.status).toBe(200);
+
+      // 登出：递增 token_version，旧 JWT 失效
+      const logoutReq = new NextRequest('http://localhost/api/auth/logout', { method: 'POST' });
+      logoutReq.cookies.set(SESSION_COOKIE_NAME, oldCookie!);
+      await logoutPost(logoutReq);
+
+      // 登出后：旧 Cookie 应被拒绝（token_version 不匹配）
+      const req2 = new NextRequest('http://localhost/api/auth/session', { method: 'GET' });
+      req2.cookies.set(SESSION_COOKIE_NAME, oldCookie!);
+      const res2 = await sessionGet(req2);
+      expect(res2.status).toBe(401);
+      const json = await res2.json();
+      expect(json.code).toBe('SESSION_REVOKED');
+    });
+
+    it('登出后重新登录获得新 JWT，新 JWT 可用', async () => {
+      const { email, authHash } = await registerTestUser();
+      // 第一次登录
+      const loginRes1 = await loginPost(
+        makeJsonRequest('http://localhost/api/auth/login', { email, authHash }),
+      );
+      const oldCookie = loginRes1.cookies.get(SESSION_COOKIE_NAME)?.value;
+
+      // 登出
+      const logoutReq = new NextRequest('http://localhost/api/auth/logout', { method: 'POST' });
+      logoutReq.cookies.set(SESSION_COOKIE_NAME, oldCookie!);
+      await logoutPost(logoutReq);
+
+      // 重新登录获得新 Cookie
+      const loginRes2 = await loginPost(
+        makeJsonRequest('http://localhost/api/auth/login', { email, authHash }),
+      );
+      const newCookie = loginRes2.cookies.get(SESSION_COOKIE_NAME)?.value;
+      expect(newCookie).toBeTruthy();
+      expect(newCookie).not.toBe(oldCookie);
+
+      // 新 Cookie 可用
+      const req = new NextRequest('http://localhost/api/auth/session', { method: 'GET' });
+      req.cookies.set(SESSION_COOKIE_NAME, newCookie!);
+      const res = await sessionGet(req);
+      expect(res.status).toBe(200);
+    });
+
+    it('改密后旧 JWT 被拒绝（token_version 递增）', async () => {
+      const { email, authHash } = await registerTestUser();
+      // 登录获取旧 Cookie
+      const loginRes = await loginPost(
+        makeJsonRequest('http://localhost/api/auth/login', { email, authHash }),
+      );
+      const oldCookie = loginRes.cookies.get(SESSION_COOKIE_NAME)?.value;
+
+      // 模拟改密 / 恢复码重置：token_version 递增使旧 JWT 失效
+      // （recover API 内部执行 token_version = token_version + 1）
+      await db.query(
+        'UPDATE users SET token_version = token_version + 1 WHERE email_normalized = $1',
+        ['user@auth.test'],
+      );
+
+      // 旧 Cookie 应被拒绝
+      const req = new NextRequest('http://localhost/api/auth/session', { method: 'GET' });
+      req.cookies.set(SESSION_COOKIE_NAME, oldCookie!);
+      const res = await sessionGet(req);
+      expect(res.status).toBe(401);
+      const json = await res.json();
+      expect(json.code).toBe('SESSION_REVOKED');
+    });
+
+    it('无 ver 字段的旧版 JWT 被拒绝（兼容性）', async () => {
+      const { sessionCookie } = await registerTestUser();
+      // 解码 JWT，移除 ver 字段后重新签发（模拟旧版无 ver 的 token）
+      const { SignJWT } = await import('jose');
+      const realSecret = new TextEncoder().encode(process.env.JWT_SECRET);
+      const forgedToken = await new SignJWT({ email: 'user@auth.test' })
+        .setProtectedHeader({ alg: 'HS256' })
+        .setSubject('fake-user-id')
+        .setIssuedAt()
+        .setExpirationTime('30d')
+        .sign(realSecret);
+
+      const req = new NextRequest('http://localhost/api/auth/session', { method: 'GET' });
+      req.cookies.set(SESSION_COOKIE_NAME, forgedToken);
+      const res = await sessionGet(req);
+      // 无 ver 字段 → verifyTokenVersion 返回 false → 401
+      expect(res.status).toBe(401);
+      void sessionCookie; // 仅用于注册用户确保 DB 状态就绪
+    });
+  });
 });

@@ -47,7 +47,7 @@ describe('会话管理模块', () => {
 
   describe('createSession — JWT 签发', () => {
     it('应返回非空字符串（JWT 格式：三段 base64 以 . 分隔）', async () => {
-      const token = await createSession(TEST_USER_ID, TEST_EMAIL);
+      const token = await createSession(TEST_USER_ID, TEST_EMAIL, 0);
       expect(typeof token).toBe('string');
       expect(token.length).toBeGreaterThan(0);
       // JWT 格式：header.payload.signature
@@ -55,14 +55,20 @@ describe('会话管理模块', () => {
     });
 
     it('JWT payload 应包含 sub=userId 与 email', async () => {
-      const token = await createSession(TEST_USER_ID, TEST_EMAIL);
+      const token = await createSession(TEST_USER_ID, TEST_EMAIL, 0);
       const payload = decodeJwt(token) as SessionPayload;
       expect(payload.sub).toBe(TEST_USER_ID);
       expect(payload.email).toBe(TEST_EMAIL);
     });
 
+    it('JWT payload 应包含 ver=token_version（M-9 撤销机制）', async () => {
+      const token = await createSession(TEST_USER_ID, TEST_EMAIL, 3);
+      const payload = decodeJwt(token) as SessionPayload;
+      expect(payload.ver).toBe(3);
+    });
+
     it('JWT 过期时间应为 30 天（exp - iat ≈ 30*24*3600）', async () => {
-      const token = await createSession(TEST_USER_ID, TEST_EMAIL);
+      const token = await createSession(TEST_USER_ID, TEST_EMAIL, 0);
       const payload = decodeJwt(token);
       expect(payload.exp).toBeDefined();
       expect(payload.iat).toBeDefined();
@@ -72,15 +78,15 @@ describe('会话管理模块', () => {
     });
 
     it('不同 userId 签发不同 JWT', async () => {
-      const token1 = await createSession(TEST_USER_ID, TEST_EMAIL);
-      const token2 = await createSession('660e8400-e29b-41d4-a716-446655440999', 'bob@passbox.local');
+      const token1 = await createSession(TEST_USER_ID, TEST_EMAIL, 0);
+      const token2 = await createSession('660e8400-e29b-41d4-a716-446655440999', 'bob@passbox.local', 0);
       expect(token1).not.toBe(token2);
     });
   });
 
   describe('verifySession — JWT 验签', () => {
     it('有效 token 应返回 payload（含 sub 与 email）', async () => {
-      const token = await createSession(TEST_USER_ID, TEST_EMAIL);
+      const token = await createSession(TEST_USER_ID, TEST_EMAIL, 0);
       const payload = await verifySession(token);
       expect(payload).not.toBeNull();
       expect(payload?.sub).toBe(TEST_USER_ID);
@@ -130,7 +136,7 @@ describe('会话管理模块', () => {
 
   describe('createSession + verifySession 往返', () => {
     it('签发后立即验签应返回一致的 payload', async () => {
-      const token = await createSession(TEST_USER_ID, TEST_EMAIL);
+      const token = await createSession(TEST_USER_ID, TEST_EMAIL, 0);
       const payload = await verifySession(token);
       expect(payload?.sub).toBe(TEST_USER_ID);
       expect(payload?.email).toBe(TEST_EMAIL);
@@ -157,7 +163,7 @@ describe('会话管理模块', () => {
 
   describe('setSessionCookie / clearSessionCookie（通过 next/headers cookies）', () => {
     it('setSessionCookie 应调用 cookies().set 并传入正确属性', async () => {
-      const token = await createSession(TEST_USER_ID, TEST_EMAIL);
+      const token = await createSession(TEST_USER_ID, TEST_EMAIL, 0);
       await setSessionCookie(token);
       expect(mockCookieSet).toHaveBeenCalledTimes(1);
       expect(mockCookieSet).toHaveBeenCalledWith(
@@ -191,7 +197,7 @@ describe('会话管理模块', () => {
     });
 
     it('Cookie 包含有效 JWT 时返回 payload', async () => {
-      const token = await createSession(TEST_USER_ID, TEST_EMAIL);
+      const token = await createSession(TEST_USER_ID, TEST_EMAIL, 0);
       mockCookieGet.mockReturnValue({ name: SESSION_COOKIE_NAME, value: token });
       const session = await getSession();
       expect(session).not.toBeNull();

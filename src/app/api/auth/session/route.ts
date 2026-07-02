@@ -14,6 +14,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { verifySession, SESSION_COOKIE_NAME } from '@/lib/session';
+import { verifyTokenVersion } from '@/lib/auth-check';
 import type { SessionResponse } from '@/types/api';
 import type { EncryptedData } from '@/types/crypto';
 
@@ -31,6 +32,15 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     }
 
     const userId = payload.sub;
+
+    // M-9：校验 token_version，登出 / 改密后旧 JWT 即使签名有效也拒绝
+    const tokenValid = await verifyTokenVersion(userId, payload.ver);
+    if (!tokenValid) {
+      return NextResponse.json(
+        { error: '会话已失效，请重新登录', code: 'SESSION_REVOKED' },
+        { status: 401 },
+      );
+    }
 
     // 查询用户加密参数
     const result = await db.query(
