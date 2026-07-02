@@ -1,0 +1,396 @@
+// @vitest-environment node
+import { describe, it, expect, beforeAll, beforeEach, afterAll } from 'vitest';
+import { NextRequest } from 'next/server';
+import { db } from '@/lib/db';
+import { runMigrations } from '@/lib/migrate';
+import { generateRecoveryCode } from '@/lib/recovery-code';
+import { SESSION_COOKIE_NAME } from '@/lib/session';
+import { POST as registerPost } from '@/app/api/auth/register/route';
+import { POST as preloginPost } from '@/app/api/auth/prelogin/route';
+import { POST as loginPost } from '@/app/api/auth/login/route';
+import { POST as logoutPost } from '@/app/api/auth/logout/route';
+import { GET as sessionGet } from '@/app/api/auth/session/route';
+import type { EncryptedData } from '@/types/crypto';
+
+/**
+ * T3.3 预登录/登录/登出/会话查询 API 集成测试（TS-3.3）
+ *
+ * 验收标准（TASK_BREAKDOWN.md T3.3）：
+ * - [x] 预登录：email 不存在时返回随机 salt + 默认 KDF 参数（防枚举）
+ * - [x] 登录：bcrypt.compare 验证，成功重置失败计数，失败计数 +1
+ * - [x] 登录：连续 5 次失败后锁定 15 分钟，返回 423 + lockedUntil
+ * - [x] 登录：锁定期间拒绝登录，返回 423
+ * - [x] 登录：成功后返回 encryptedKey + kdfSalt + kdfParams
+ * - [x] 登录：错误信息统一为"邮箱或主密码错误"（SEC-10）
+ * - [x] 会话查询：Cookie 有效时返回 encryptedKey + kdfParams
+ * - [x] 登出：清除会话 Cookie，返回 200
+ */
+describe('T3.3 认证 API 集成测试', () => {
+  beforeAll(async () => {
+    await runMigrations();
+  });
+
+  beforeEach(async () => {
+    // 清理本测试文件创建的用户（使用 @auth.test 域名隔离）
+    await db.query("DELETE FROM users WHERE email_normalized LIKE '%@auth.test'");
+  });
+
+  afterAll(async () => {
+    await db.end();
+  });
+
+  // ============================================================
+  // 测试辅助函数
+  // ============================================================
+
+  const TEST_AUTH_HASH = 'dGhpcy1pcy1hLXNlY3JldC1oYXNo'; // base64(32 bytes)
+  const WRONG_AUTH_HASH = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=';
+
+  function makeEncryptedData(): EncryptedData {
+    return { v: 1, iv: 'AAAAAAAAAAAAAAAA', ct: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=' };
+  }
+
+  function makeKdfSalt(): string {
+    return 'AAAAAAAAAAAAAAAAAAAAAA=='; // 16 bytes base64
+  }
+
+  const DEFAULT_KDF_PARAMS = {
+    type: 'argon2id' as const,
+    memoryKib: 65536,
+    iterations: 3,
+    parallelism: 4,
+  };
+
+  /** 注册一个测试用户，返回 { email, authHash, userId, vaultId, sessionCookie } */
+  async function registerTestUser(
+    email = 'user@auth.test',
+    authHash = TEST_AUTH_HASH,
+  ): Promise<{
+    email: string;
+    authHash: string;
+    userId: string;
+    vaultId: string;
+    sessionCookie: string;
+  }> {
+    const { formatted: recoveryCode } = generateRecoveryCode();
+    const body = {
+      email,
+      authHash,
+      encryptedKey: makeEncryptedData(),
+      kdfSalt: makeKdfSalt(),
+      kdfParams: DEFAULT_KDF_PARAMS,
+      recoveryCode,
+      recoveryEncryptedKey: makeEncryptedData(),
+      defaultVaultNameEncrypted: makeEncryptedData(),
+    };
+    const res = await registerPost(
+      new NextRequest('http://localhost/api/auth/register', {
+        method: 'POST',
+        body: JSON.stringify(body),
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+    const json = await res.json();
+    return {
+      email,
+      authHash,
+      userId: json.user.id,
+      vaultId: json.defaultVaultId,
+      sessionCookie: res.cookies.get(SESSION_COOKIE_NAME)?.value ?? '',
+    };
+  }
+
+  function makeJsonRequest(url: string, body: unknown): NextRequest {
+    return new NextRequest(url, {
+      method: 'POST',
+      body: JSON.stringify(body),
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  // ============================================================
+  // 预登录（防枚举）
+  // ============================================================
+
+  describe('POST /api/auth/prelogin', () => {
+    it('已注册邮箱返回用户实际 KDF 参数', async () => {
+      await registerTestUser();
+      const res = await preloginPost(
+        makeJsonRequest('http://localhost/api/auth/prelogin', { email: 'user@auth.test' }),
+      );
+      expect(res.status).toBe(200);
+      const json = await res.json();
+      expect(json.kdfSalt).toBeTruthy();
+      expect(json.kdfParams).toMatchObject(DEFAULT_KDF_PARAMS);
+    });
+
+    it('未注册邮箱返回随机 salt + 默认 KDF 参数（防枚举）', async () => {
+      const res = await preloginPost(
+        makeJsonRequest('http://localhost/api/auth/prelogin', { email: 'nobody@auth.test' }),
+      );
+      expect(res.status).toBe(200);
+      const json = await res.json();
+      expect(json.kdfSalt).toBeTruthy();
+      expect(json.kdfParams).toMatchObject(DEFAULT_KDF_PARAMS);
+    });
+
+    it('未注册邮箱两次请求返回不同 salt（随机性）', async () => {
+      const res1 = await preloginPost(
+        makeJsonRequest('http://localhost/api/auth/prelogin', { email: 'nobody@auth.test' }),
+      );
+      const res2 = await preloginPost(
+        makeJsonRequest('http://localhost/api/auth/prelogin', { email: 'nobody@auth.test' }),
+      );
+      const json1 = await res1.json();
+      const json2 = await res2.json();
+      expect(json1.kdfSalt).not.toBe(json2.kdfSalt);
+    });
+
+    it('已注册邮箱返回的 salt 与注册时一致', async () => {
+      // 注册时 kdfSalt = makeKdfSalt() = 'AAAAAAAAAAAAAAAAAAAAAA=='
+      await registerTestUser();
+      const res = await preloginPost(
+        makeJsonRequest('http://localhost/api/auth/prelogin', { email: 'user@auth.test' }),
+      );
+      const json = await res.json();
+      expect(json.kdfSalt).toBe(makeKdfSalt());
+    });
+
+    it('邮箱大小写不敏感', async () => {
+      await registerTestUser('User@Auth.Test');
+      const res = await preloginPost(
+        makeJsonRequest('http://localhost/api/auth/prelogin', { email: 'user@auth.test' }),
+      );
+      expect(res.status).toBe(200);
+      const json = await res.json();
+      expect(json.kdfParams).toMatchObject(DEFAULT_KDF_PARAMS);
+    });
+
+    it('无效邮箱返回 400', async () => {
+      const res = await preloginPost(
+        makeJsonRequest('http://localhost/api/auth/prelogin', { email: 'not-an-email' }),
+      );
+      expect(res.status).toBe(400);
+    });
+  });
+
+  // ============================================================
+  // 登录
+  // ============================================================
+
+  describe('POST /api/auth/login', () => {
+    it('正确 authHash 登录成功 → 200 + LoginResponse + Cookie', async () => {
+      const { email, authHash } = await registerTestUser();
+      const res = await loginPost(
+        makeJsonRequest('http://localhost/api/auth/login', { email, authHash }),
+      );
+      expect(res.status).toBe(200);
+      const json = await res.json();
+      expect(json).toHaveProperty('user.id');
+      expect(json).toHaveProperty('user.email', email);
+      expect(json).toHaveProperty('encryptedKey');
+      expect(json.encryptedKey).toMatchObject({ v: 1, iv: expect.any(String), ct: expect.any(String) });
+      expect(json).toHaveProperty('kdfSalt');
+      expect(json).toHaveProperty('kdfParams');
+      // 会话 Cookie 已设置
+      const cookie = res.cookies.get(SESSION_COOKIE_NAME);
+      expect(cookie?.value).toBeTruthy();
+    });
+
+    it('错误 authHash → 401 + 统一错误信息', async () => {
+      const { email } = await registerTestUser();
+      const res = await loginPost(
+        makeJsonRequest('http://localhost/api/auth/login', {
+          email,
+          authHash: WRONG_AUTH_HASH,
+        }),
+      );
+      expect(res.status).toBe(401);
+      const json = await res.json();
+      expect(json.error).toBe('邮箱或主密码错误');
+    });
+
+    it('不存在的邮箱 → 401 + 相同错误信息（防枚举）', async () => {
+      const res = await loginPost(
+        makeJsonRequest('http://localhost/api/auth/login', {
+          email: 'nobody@auth.test',
+          authHash: TEST_AUTH_HASH,
+        }),
+      );
+      expect(res.status).toBe(401);
+      const json = await res.json();
+      expect(json.error).toBe('邮箱或主密码错误');
+    });
+
+    it('失败后 failed_login_attempts 递增', async () => {
+      const { email } = await registerTestUser();
+      // 失败 3 次
+      for (let i = 0; i < 3; i++) {
+        await loginPost(
+          makeJsonRequest('http://localhost/api/auth/login', {
+            email,
+            authHash: WRONG_AUTH_HASH,
+          }),
+        );
+      }
+      const result = await db.query(
+        'SELECT failed_login_attempts FROM users WHERE email_normalized = $1',
+        ['user@auth.test'],
+      );
+      expect(result.rows[0].failed_login_attempts).toBe(3);
+    });
+
+    it('连续 5 次失败后锁定账户 → 423 + lockedUntil', async () => {
+      const { email } = await registerTestUser();
+      for (let i = 0; i < 5; i++) {
+        await loginPost(
+          makeJsonRequest('http://localhost/api/auth/login', {
+            email,
+            authHash: WRONG_AUTH_HASH,
+          }),
+        );
+      }
+      // 第 5 次应返回 423
+      const res = await loginPost(
+        makeJsonRequest('http://localhost/api/auth/login', {
+          email,
+          authHash: WRONG_AUTH_HASH,
+        }),
+      );
+      expect(res.status).toBe(423);
+      const json = await res.json();
+      expect(json).toHaveProperty('lockedUntil');
+      expect(new Date(json.lockedUntil).getTime()).toBeGreaterThan(Date.now());
+    });
+
+    it('锁定期间即使密码正确也拒绝登录 → 423', async () => {
+      const { email, authHash } = await registerTestUser();
+      // 触发锁定
+      for (let i = 0; i < 5; i++) {
+        await loginPost(
+          makeJsonRequest('http://localhost/api/auth/login', {
+            email,
+            authHash: WRONG_AUTH_HASH,
+          }),
+        );
+      }
+      // 用正确密码登录仍应被拒
+      const res = await loginPost(
+        makeJsonRequest('http://localhost/api/auth/login', { email, authHash }),
+      );
+      expect(res.status).toBe(423);
+    });
+
+    it('登录成功后重置 failed_login_attempts', async () => {
+      const { email, authHash } = await registerTestUser();
+      // 失败 2 次
+      for (let i = 0; i < 2; i++) {
+        await loginPost(
+          makeJsonRequest('http://localhost/api/auth/login', {
+            email,
+            authHash: WRONG_AUTH_HASH,
+          }),
+        );
+      }
+      // 成功登录
+      await loginPost(
+        makeJsonRequest('http://localhost/api/auth/login', { email, authHash }),
+      );
+      const result = await db.query(
+        'SELECT failed_login_attempts, locked_until, last_login_at FROM users WHERE email_normalized = $1',
+        ['user@auth.test'],
+      );
+      expect(result.rows[0].failed_login_attempts).toBe(0);
+      expect(result.rows[0].locked_until).toBeNull();
+      expect(result.rows[0].last_login_at).not.toBeNull();
+    });
+
+    it('登录响应包含 encryptedKey 与注册时一致', async () => {
+      const { email, authHash } = await registerTestUser();
+      const res = await loginPost(
+        makeJsonRequest('http://localhost/api/auth/login', { email, authHash }),
+      );
+      const json = await res.json();
+      // 注册时 encryptedKey = makeEncryptedData() = {v:1, iv:'AAAA...', ct:'AAAA...'}
+      expect(json.encryptedKey).toMatchObject(makeEncryptedData());
+    });
+
+    it('无效邮箱返回 400', async () => {
+      const res = await loginPost(
+        makeJsonRequest('http://localhost/api/auth/login', {
+          email: 'not-an-email',
+          authHash: TEST_AUTH_HASH,
+        }),
+      );
+      expect(res.status).toBe(400);
+    });
+  });
+
+  // ============================================================
+  // 登出
+  // ============================================================
+
+  describe('POST /api/auth/logout', () => {
+    it('返回 200 + 清除 Cookie', async () => {
+      const res = await logoutPost(
+        new NextRequest('http://localhost/api/auth/logout', { method: 'POST' }),
+      );
+      expect(res.status).toBe(200);
+      const json = await res.json();
+      expect(json).toHaveProperty('success', true);
+      // Cookie 被 maxAge=0 清除
+      const cookie = res.cookies.get(SESSION_COOKIE_NAME);
+      expect(cookie?.value).toBe('');
+      expect(cookie?.maxAge).toBe(0);
+    });
+  });
+
+  // ============================================================
+  // 会话查询
+  // ============================================================
+
+  describe('GET /api/auth/session', () => {
+    it('有效 Cookie 返回 200 + SessionResponse', async () => {
+      const { sessionCookie } = await registerTestUser();
+      const req = new NextRequest('http://localhost/api/auth/session', { method: 'GET' });
+      req.cookies.set(SESSION_COOKIE_NAME, sessionCookie);
+      const res = await sessionGet(req);
+      expect(res.status).toBe(200);
+      const json = await res.json();
+      expect(json).toHaveProperty('user.id');
+      expect(json).toHaveProperty('user.email', 'user@auth.test');
+      expect(json).toHaveProperty('encryptedKey');
+      expect(json.encryptedKey).toMatchObject({ v: 1, iv: expect.any(String), ct: expect.any(String) });
+      expect(json).toHaveProperty('kdfSalt');
+      expect(json).toHaveProperty('kdfParams');
+    });
+
+    it('无 Cookie 返回 401', async () => {
+      const req = new NextRequest('http://localhost/api/auth/session', { method: 'GET' });
+      const res = await sessionGet(req);
+      expect(res.status).toBe(401);
+    });
+
+    it('无效 Cookie 返回 401', async () => {
+      const req = new NextRequest('http://localhost/api/auth/session', { method: 'GET' });
+      req.cookies.set(SESSION_COOKIE_NAME, 'invalid.jwt.token');
+      const res = await sessionGet(req);
+      expect(res.status).toBe(401);
+    });
+
+    it('登录后获取的 Cookie 可用于会话查询', async () => {
+      const { email, authHash } = await registerTestUser();
+      // 登录获取 Cookie
+      const loginRes = await loginPost(
+        makeJsonRequest('http://localhost/api/auth/login', { email, authHash }),
+      );
+      const cookie = loginRes.cookies.get(SESSION_COOKIE_NAME)?.value;
+      expect(cookie).toBeTruthy();
+      // 用 Cookie 查询会话
+      const req = new NextRequest('http://localhost/api/auth/session', { method: 'GET' });
+      req.cookies.set(SESSION_COOKIE_NAME, cookie!);
+      const res = await sessionGet(req);
+      expect(res.status).toBe(200);
+    });
+  });
+});
