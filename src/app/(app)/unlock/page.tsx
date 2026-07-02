@@ -1,13 +1,18 @@
 /**
- * 解锁页占位（T3.4 实现主密码解锁流程）。
+ * 解锁页 (T3.7)
+ *
+ * 会话有效但密钥未加载（手动锁定 / 自动锁定 / 页面刷新）时展示。
+ * useSearchParams 需 Suspense 包裹以满足 Next.js 预渲染要求。
  */
+import { Suspense } from 'react';
+import { UnlockForm } from './_components/unlock-form';
+
 export default function UnlockPage() {
   return (
-    <div className="flex flex-1 items-center justify-center px-6 py-16">
-      <div className="flex flex-col items-center gap-4 text-center">
-        <h1 className="text-2xl font-semibold tracking-tight">解锁密码库</h1>
-        <p className="text-sm text-muted-foreground">解锁页将在 T3.4 实现</p>
-      </div>
+    <div className="flex flex-1 items-center justify-center px-6 py-12">
+      <Suspense fallback={null}>
+        <UnlockForm />
+      </Suspense>
     </div>
   );
 }
