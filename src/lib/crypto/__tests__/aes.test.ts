@@ -108,6 +108,17 @@ describe('AES-256-GCM 加解密', () => {
       await expect(decrypt(key, bad, 'aad')).rejects.toThrow(/版本/);
     });
 
+    it('iv / ct 非字符串时抛出异常（防御畸形数据）', async () => {
+      const key = await makeKey();
+      const encrypted = await encrypt(key, 'secret', 'aad');
+      // iv 为非字符串
+      const badIv = { ...encrypted, iv: 123 as unknown as string };
+      await expect(decrypt(key, badIv, 'aad')).rejects.toThrow(/iv \/ ct/);
+      // ct 为非字符串
+      const badCt = { ...encrypted, ct: null as unknown as string };
+      await expect(decrypt(key, badCt, 'aad')).rejects.toThrow(/iv \/ ct/);
+    });
+
     it('不同密钥无法解密对方加密的密文', async () => {
       const key1 = await makeKey();
       const key2 = await makeKey();
