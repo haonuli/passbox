@@ -37,6 +37,14 @@ const LOCK_DURATION_MINUTES = 15;
 /** 统一错误信息（不区分 email 不存在 vs 密码错误） */
 const INVALID_CREDENTIALS_ERROR = '邮箱或主密码错误';
 
+/**
+ * 虚拟 bcrypt 哈希，用于 email 不存在时均衡耗时（防枚举 SEC-10）。
+ *
+ * 模块加载时预计算一次（cost=10，约 100ms），确保 email 不存在的分支
+ * 也会执行一次 bcrypt.compare，与密码错误分支耗时接近一致。
+ */
+const DUMMY_PASSWORD_HASH = bcrypt.hashSync('dummy-password-for-timing', 10);
+
 const loginSchema = z.object({
   email: z.string().trim().email('邮箱格式无效'),
   authHash: z.string().min(1, 'authHash 不能为空'),
@@ -52,119 +60,138 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: '请求体不是合法 JSON' }, { status: 400 });
   }
 
-  const parsed = loginSchema.safeParse(body);
-  if (!parsed.success) {
-    return NextResponse.json(
-      { error: '请求参数无效', code: 'INVALID_PARAMS' },
-      { status: 400 },
-    );
-  }
-
-  const { email, authHash } = parsed.data;
-  const emailNormalized = email.toLowerCase();
-
-  // 查询用户
-  const result = await db.query(
-    `SELECT id, email, password_hash, encrypted_key, kdf_salt,
-            kdf_memory_kib, kdf_iterations, kdf_parallelism,
-            failed_login_attempts, locked_until, two_factor_enabled
-     FROM users WHERE email_normalized = $1`,
-    [emailNormalized],
-  );
-
-  // 防枚举：email 不存在时返回与密码错误相同的错误信息
-  if (result.rows.length === 0) {
-    return NextResponse.json(
-      { error: INVALID_CREDENTIALS_ERROR, code: 'INVALID_CREDENTIALS' },
-      { status: 401 },
-    );
-  }
-
-  const user = result.rows[0];
-
-  // 检查账户锁定状态
-  if (user.locked_until) {
-    const lockedUntil = new Date(user.locked_until as string);
-    if (lockedUntil > new Date()) {
+  let parsed: ReturnType<typeof loginSchema.safeParse>;
+  try {
+    parsed = loginSchema.safeParse(body);
+    if (!parsed.success) {
       return NextResponse.json(
-        {
-          error: '账户已锁定，请稍后重试',
-          code: 'ACCOUNT_LOCKED',
-          lockedUntil: lockedUntil.toISOString(),
-        },
-        { status: 423 },
+        { error: '请求参数无效', code: 'INVALID_PARAMS' },
+        { status: 400 },
       );
     }
-  }
 
-  // bcrypt 验证 authHash
-  const isMatch = await bcrypt.compare(authHash, user.password_hash as string);
+    const { email, authHash } = parsed.data;
+    const emailNormalized = email.toLowerCase();
 
-  if (!isMatch) {
-    // 密码错误：失败计数 +1，达到上限则锁定
-    const newAttempts = (user.failed_login_attempts as number) + 1;
-    const shouldLock = newAttempts >= MAX_FAILED_ATTEMPTS;
+    // 查询用户
+    const result = await db.query(
+      `SELECT id, email, password_hash, encrypted_key, kdf_salt,
+              kdf_memory_kib, kdf_iterations, kdf_parallelism,
+              failed_login_attempts, locked_until, two_factor_enabled
+       FROM users WHERE email_normalized = $1`,
+      [emailNormalized],
+    );
 
-    if (shouldLock) {
-      await db.query(
-        `UPDATE users
-         SET failed_login_attempts = $1, locked_until = NOW() + INTERVAL '${LOCK_DURATION_MINUTES} minutes'
-         WHERE id = $2`,
-        [newAttempts, user.id],
+    // 防枚举（SEC-10）：email 不存在时执行一次虚拟 bcrypt.compare，
+    // 使该分支耗时与"密码错误"分支接近一致，避免通过响应时间差枚举邮箱。
+    if (result.rows.length === 0) {
+      await bcrypt.compare(authHash, DUMMY_PASSWORD_HASH);
+      return NextResponse.json(
+        { error: INVALID_CREDENTIALS_ERROR, code: 'INVALID_CREDENTIALS' },
+        { status: 401 },
       );
-      // 查询更新后的 locked_until
-      const lockResult = await db.query(
-        'SELECT locked_until FROM users WHERE id = $1',
+    }
+
+    const user = result.rows[0];
+
+    // 检查账户锁定状态
+    if (user.locked_until) {
+      const lockedUntil = new Date(user.locked_until as string);
+      if (lockedUntil > new Date()) {
+        return NextResponse.json(
+          {
+            error: '账户已锁定，请稍后重试',
+            code: 'ACCOUNT_LOCKED',
+            lockedUntil: lockedUntil.toISOString(),
+          },
+          { status: 423 },
+        );
+      }
+      // 锁定已过期：重置失败计数与锁定标记，避免"过期后一次失败即重新锁定"的 DoS
+      await db.query(
+        'UPDATE users SET failed_login_attempts = 0, locked_until = NULL WHERE id = $1',
         [user.id],
       );
-      const lockedUntil = new Date(lockResult.rows[0].locked_until as string);
+      user.failed_login_attempts = 0;
+      user.locked_until = null;
+    }
+
+    // bcrypt 验证 authHash
+    const isMatch = await bcrypt.compare(authHash, user.password_hash as string);
+
+    if (!isMatch) {
+      // 密码错误：失败计数 +1，达到上限则锁定
+      const newAttempts = (user.failed_login_attempts as number) + 1;
+      const shouldLock = newAttempts >= MAX_FAILED_ATTEMPTS;
+
+      if (shouldLock) {
+        await db.query(
+          `UPDATE users
+           SET failed_login_attempts = $1, locked_until = NOW() + make_interval(mins => $2)
+           WHERE id = $3`,
+          [newAttempts, LOCK_DURATION_MINUTES, user.id],
+        );
+        // 查询更新后的 locked_until
+        const lockResult = await db.query(
+          'SELECT locked_until FROM users WHERE id = $1',
+          [user.id],
+        );
+        const lockedUntil = new Date(lockResult.rows[0].locked_until as string);
+        return NextResponse.json(
+          {
+            error: '账户已锁定，请稍后重试',
+            code: 'ACCOUNT_LOCKED',
+            lockedUntil: lockedUntil.toISOString(),
+          },
+          { status: 423 },
+        );
+      }
+
+      await db.query(
+        'UPDATE users SET failed_login_attempts = $1 WHERE id = $2',
+        [newAttempts, user.id],
+      );
+
       return NextResponse.json(
-        {
-          error: '账户已锁定，请稍后重试',
-          code: 'ACCOUNT_LOCKED',
-          lockedUntil: lockedUntil.toISOString(),
-        },
-        { status: 423 },
+        { error: INVALID_CREDENTIALS_ERROR, code: 'INVALID_CREDENTIALS' },
+        { status: 401 },
       );
     }
 
+    // 密码正确：重置失败计数、清除锁定、更新最后登录时间
     await db.query(
-      'UPDATE users SET failed_login_attempts = $1 WHERE id = $2',
-      [newAttempts, user.id],
+      `UPDATE users
+       SET failed_login_attempts = 0, locked_until = NULL, last_login_at = NOW()
+       WHERE id = $1`,
+      [user.id],
     );
 
+    // 签发会话 Cookie
+    const token = await createSession(user.id as string, user.email as string);
+
+    // 构造 LoginResponse（encrypted_key 在 DB 中为 JSON 字符串，解析回对象）
+    const encryptedKey = JSON.parse(user.encrypted_key as string) as EncryptedData;
+    const response: LoginResponse = {
+      user: { id: user.id as string, email: user.email as string },
+      encryptedKey,
+      kdfSalt: (user.kdf_salt as Buffer).toString('base64'),
+      kdfParams: {
+        type: 'argon2id',
+        memoryKib: user.kdf_memory_kib as number,
+        iterations: user.kdf_iterations as number,
+        parallelism: user.kdf_parallelism as number,
+      },
+    };
+
+    const res = NextResponse.json(response, { status: 200 });
+    res.cookies.set(SESSION_COOKIE_NAME, token, SESSION_COOKIE_OPTIONS);
+    return res;
+  } catch (err) {
+    // 兜底：任何未预期异常统一返回 500，避免泄漏内部错误细节
+    console.error('[login] 未预期错误:', err);
     return NextResponse.json(
-      { error: INVALID_CREDENTIALS_ERROR, code: 'INVALID_CREDENTIALS' },
-      { status: 401 },
+      { error: '服务器内部错误', code: 'INTERNAL_ERROR' },
+      { status: 500 },
     );
   }
-
-  // 密码正确：重置失败计数、清除锁定、更新最后登录时间
-  await db.query(
-    `UPDATE users
-     SET failed_login_attempts = 0, locked_until = NULL, last_login_at = NOW()
-     WHERE id = $1`,
-    [user.id],
-  );
-
-  // 签发会话 Cookie
-  const token = await createSession(user.id as string, user.email as string);
-
-  // 构造 LoginResponse（encrypted_key 在 DB 中为 JSON 字符串，解析回对象）
-  const encryptedKey = JSON.parse(user.encrypted_key as string) as EncryptedData;
-  const response: LoginResponse = {
-    user: { id: user.id as string, email: user.email as string },
-    encryptedKey,
-    kdfSalt: (user.kdf_salt as Buffer).toString('base64'),
-    kdfParams: {
-      type: 'argon2id',
-      memoryKib: user.kdf_memory_kib as number,
-      iterations: user.kdf_iterations as number,
-      parallelism: user.kdf_parallelism as number,
-    },
-  };
-
-  const res = NextResponse.json(response, { status: 200 });
-  res.cookies.set(SESSION_COOKIE_NAME, token, SESSION_COOKIE_OPTIONS);
-  return res;
 }

@@ -281,6 +281,39 @@ describe('T3.3 认证 API 集成测试', () => {
       expect(res.status).toBe(423);
     });
 
+    it('锁定过期后重置 failed_login_attempts（M-3：避免过期后一次失败即重新锁定）', async () => {
+      const { email } = await registerTestUser();
+      // 触发锁定（5 次失败 → failed_login_attempts=5, locked_until=未来）
+      for (let i = 0; i < 5; i++) {
+        await loginPost(
+          makeJsonRequest('http://localhost/api/auth/login', {
+            email,
+            authHash: WRONG_AUTH_HASH,
+          }),
+        );
+      }
+      // 手动将 locked_until 设为过去，模拟锁定过期
+      await db.query(
+        "UPDATE users SET locked_until = NOW() - INTERVAL '1 minute' WHERE email_normalized = $1",
+        ['user@auth.test'],
+      );
+      // 锁定过期后再失败一次：应返回 401（而非 423），证明 failed_login_attempts 已重置
+      const res = await loginPost(
+        makeJsonRequest('http://localhost/api/auth/login', {
+          email,
+          authHash: WRONG_AUTH_HASH,
+        }),
+      );
+      expect(res.status).toBe(401);
+      // 验证 failed_login_attempts 仅 +1（从 0 开始），而非从 5 累加到 6 再次锁定
+      const result = await db.query(
+        'SELECT failed_login_attempts, locked_until FROM users WHERE email_normalized = $1',
+        ['user@auth.test'],
+      );
+      expect(result.rows[0].failed_login_attempts).toBe(1);
+      expect(result.rows[0].locked_until).toBeNull();
+    });
+
     it('登录成功后重置 failed_login_attempts', async () => {
       const { email, authHash } = await registerTestUser();
       // 失败 2 次
