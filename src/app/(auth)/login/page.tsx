@@ -1,13 +1,18 @@
 /**
- * 登录页占位（T3.2 实现完整登录表单与加密流程）。
+ * 登录页 (T3.6)
+ *
+ * Server Component 壳，渲染 LoginForm。
+ * useSearchParams 需 Suspense 包裹以满足 Next.js 预渲染要求。
  */
+import { Suspense } from 'react';
+import { LoginForm } from './_components/login-form';
+
 export default function LoginPage() {
   return (
-    <div className="flex flex-1 items-center justify-center px-6 py-16">
-      <div className="flex flex-col items-center gap-4 text-center">
-        <h1 className="text-2xl font-semibold tracking-tight">登录</h1>
-        <p className="text-sm text-muted-foreground">登录页将在 T3.2 实现</p>
-      </div>
+    <div className="flex flex-1 items-center justify-center px-6 py-12">
+      <Suspense fallback={null}>
+        <LoginForm />
+      </Suspense>
     </div>
   );
 }
