@@ -126,6 +126,9 @@ describe('T3.4 认证状态管理 Store', () => {
       const masterKey = mockMasterKey();
       const symmetricKey = mockCryptoKey();
 
+      useAuthStore
+        .getState()
+        .setAuthenticated(mockUser, mockEncryptedKey, mockKdfSalt, mockKdfParams);
       useAuthStore.getState().unlock(masterKey, symmetricKey);
 
       const state = useAuthStore.getState();
@@ -233,6 +236,9 @@ describe('T3.4 认证状态管理 Store', () => {
 
     it('masterKey 内存被零填充', () => {
       const masterKey = mockMasterKey();
+      useAuthStore
+        .getState()
+        .setAuthenticated(mockUser, mockEncryptedKey, mockKdfSalt, mockKdfParams);
       useAuthStore.getState().unlock(masterKey, mockCryptoKey());
 
       useAuthStore.getState().logout();
@@ -241,6 +247,9 @@ describe('T3.4 认证状态管理 Store', () => {
     });
 
     it('从 locked 状态也能正确登出', () => {
+      useAuthStore
+        .getState()
+        .setAuthenticated(mockUser, mockEncryptedKey, mockKdfSalt, mockKdfParams);
       useAuthStore.getState().unlock(mockMasterKey(), mockCryptoKey());
       useAuthStore.getState().lock();
 
@@ -256,6 +265,9 @@ describe('T3.4 认证状态管理 Store', () => {
 
   describe('密钥不持久化（ADR-007）', () => {
     it('unlock 后 localStorage 无密钥数据', () => {
+      useAuthStore
+        .getState()
+        .setAuthenticated(mockUser, mockEncryptedKey, mockKdfSalt, mockKdfParams);
       useAuthStore.getState().unlock(mockMasterKey(), mockCryptoKey());
 
       const lsData = JSON.stringify(localStorage);
@@ -263,6 +275,9 @@ describe('T3.4 认证状态管理 Store', () => {
     });
 
     it('unlock 后 sessionStorage 无密钥数据', () => {
+      useAuthStore
+        .getState()
+        .setAuthenticated(mockUser, mockEncryptedKey, mockKdfSalt, mockKdfParams);
       useAuthStore.getState().unlock(mockMasterKey(), mockCryptoKey());
 
       const ssData = JSON.stringify(sessionStorage);
@@ -272,6 +287,9 @@ describe('T3.4 认证状态管理 Store', () => {
     it('store 未使用 persist 中间件（无 zustand-persist 存储 key）', () => {
       // persist 中间件会在 localStorage 中写入以 store name 为 key 的条目
       // 验证 localStorage 中无任何 zustand 相关条目
+      useAuthStore
+        .getState()
+        .setAuthenticated(mockUser, mockEncryptedKey, mockKdfSalt, mockKdfParams);
       useAuthStore.getState().unlock(mockMasterKey(), mockCryptoKey());
 
       const keys = Object.keys(localStorage);
@@ -298,12 +316,16 @@ describe('T3.4 认证状态管理 Store', () => {
       const listener = vi.fn();
       const unsub = useAuthStore.subscribe(listener);
 
+      useAuthStore
+        .getState()
+        .setAuthenticated(mockUser, mockEncryptedKey, mockKdfSalt, mockKdfParams);
       useAuthStore.getState().unlock(mockMasterKey(), mockCryptoKey());
 
-      expect(listener).toHaveBeenCalledTimes(1);
-      const [newState, prevState] = listener.mock.calls[0];
-      expect(prevState.status).toBe('unauthenticated');
+      // setAuthenticated + unlock 各触发一次
+      expect(listener).toHaveBeenCalledTimes(2);
+      const [newState, prevState] = listener.mock.calls[1];
       expect(newState.status).toBe('unlocked');
+      expect(prevState.status).toBe('authenticated');
       unsub();
     });
 
@@ -335,6 +357,65 @@ describe('T3.4 认证状态管理 Store', () => {
 
       expect(userChangeCount).toBe(0); // user 未变化
       unsub();
+    });
+  });
+
+  // ----------------------------------------------------------
+  // M-13：状态机校验（防止无效转换导致密钥遗留）
+  // ----------------------------------------------------------
+
+  describe('M-13 状态机校验', () => {
+    it('unlock 从 unauthenticated 状态调用 → 被拒绝，密钥零填充', () => {
+      const masterKey = mockMasterKey();
+      useAuthStore.getState().unlock(masterKey, mockCryptoKey());
+
+      // 状态不变，密钥被零填充
+      expect(useAuthStore.getState().status).toBe('unauthenticated');
+      expect(useAuthStore.getState().masterKey).toBeNull();
+      expect(Array.from(masterKey)).toEqual(Array(32).fill(0));
+    });
+
+    it('lock 从 unauthenticated 状态调用 → 无操作', () => {
+      useAuthStore.getState().lock();
+      expect(useAuthStore.getState().status).toBe('unauthenticated');
+    });
+
+    it('lock 从 authenticated 状态调用 → 无操作', () => {
+      useAuthStore
+        .getState()
+        .setAuthenticated(mockUser, mockEncryptedKey, mockKdfSalt, mockKdfParams);
+      useAuthStore.getState().lock();
+      expect(useAuthStore.getState().status).toBe('authenticated');
+    });
+
+    it('setAuthenticated 从 unlocked 状态调用 → 旧 masterKey 零填充', () => {
+      const masterKey = mockMasterKey();
+      useAuthStore
+        .getState()
+        .setAuthenticated(mockUser, mockEncryptedKey, mockKdfSalt, mockKdfParams);
+      useAuthStore.getState().unlock(masterKey, mockCryptoKey());
+
+      // 从 unlocked 再次调用 setAuthenticated（如 session 恢复覆盖）
+      useAuthStore
+        .getState()
+        .setAuthenticated(mockUser, mockEncryptedKey, mockKdfSalt, mockKdfParams);
+
+      // 旧 masterKey 被零填充，store 中密钥已清除
+      expect(Array.from(masterKey)).toEqual(Array(32).fill(0));
+      expect(useAuthStore.getState().status).toBe('authenticated');
+      expect(useAuthStore.getState().masterKey).toBeNull();
+      expect(useAuthStore.getState().symmetricKey).toBeNull();
+    });
+
+    it('lock 从 locked 状态调用 → 无操作', () => {
+      useAuthStore
+        .getState()
+        .setAuthenticated(mockUser, mockEncryptedKey, mockKdfSalt, mockKdfParams);
+      useAuthStore.getState().unlock(mockMasterKey(), mockCryptoKey());
+      useAuthStore.getState().lock();
+      // 再次 lock 不产生副作用
+      useAuthStore.getState().lock();
+      expect(useAuthStore.getState().status).toBe('locked');
     });
   });
 

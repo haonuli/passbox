@@ -123,23 +123,43 @@ export const useAuthStore = create<AuthStore>((set) => ({
   kdfParams: null,
 
   setAuthenticated: (user, encryptedKey, kdfSalt, kdfParams) =>
-    set({
-      status: 'authenticated',
-      user,
-      encryptedKey,
-      kdfSalt,
-      kdfParams,
+    set((state) => {
+      // M-13：从 unlocked/locked 状态调用时，先零填充旧 masterKey 防止内存遗留
+      // （否则旧 masterKey 引用断开后缓冲区仍含密钥，GC 前可被 dump）
+      zeroFill(state.masterKey);
+      return {
+        status: 'authenticated',
+        user,
+        encryptedKey,
+        kdfSalt,
+        kdfParams,
+        masterKey: null,
+        symmetricKey: null,
+      };
     }),
 
   unlock: (masterKey, symmetricKey) =>
-    set({
-      status: 'unlocked',
-      masterKey,
-      symmetricKey,
+    set((state) => {
+      // M-13：仅允许从 authenticated / locked 状态解锁
+      // unauthenticated 时无 user 上下文，解锁会产生不一致状态
+      if (state.status !== 'authenticated' && state.status !== 'locked') {
+        // 无效转换：零填充传入的密钥后忽略
+        zeroFill(masterKey);
+        return {};
+      }
+      return {
+        status: 'unlocked',
+        masterKey,
+        symmetricKey,
+      };
     }),
 
   lock: () =>
     set((state) => {
+      // M-13：仅从 unlocked 状态锁定才有意义
+      if (state.status !== 'unlocked') {
+        return {};
+      }
       zeroFill(state.masterKey);
       return {
         status: 'locked',
