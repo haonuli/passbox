@@ -14,8 +14,8 @@
     "test:coverage": "vitest run --coverage",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
-    "test:db:setup": "bash scripts/init-test-db.sh",
-    "migrate": "tsx src/lib/migrate.ts"
+    "test:db:setup": "node --env-file=.env.test --import tsx scripts/init-test-db.ts",
+    "migrate": "node --env-file=.env.local --import tsx src/lib/migrate.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
