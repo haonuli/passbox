@@ -1,13 +1,15 @@
 /**
- * 注册页占位（T3.1 实现完整注册表单与密钥派生流程）。
+ * 注册页 (T3.5)
+ *
+ * Server Component 壳，渲染 RegisterForm（Client Component）。
+ * 注册成功后表单内部切换为 Emergency Kit 展示。
  */
+import { RegisterForm } from './_components/register-form';
+
 export default function RegisterPage() {
   return (
-    <div className="flex flex-1 items-center justify-center px-6 py-16">
-      <div className="flex flex-col items-center gap-4 text-center">
-        <h1 className="text-2xl font-semibold tracking-tight">创建账户</h1>
-        <p className="text-sm text-muted-foreground">注册页将在 T3.1 实现</p>
-      </div>
+    <div className="flex flex-1 items-center justify-center px-6 py-12">
+      <RegisterForm />
     </div>
   );
 }

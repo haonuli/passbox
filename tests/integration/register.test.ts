@@ -225,9 +225,15 @@ describe('T3.2 注册 API 集成测试', () => {
       await POST(makeRequest(body));
       // 第二次注册失败
       await POST(makeRequest(body));
-      // 应只有 1 个用户、1 个保险库
-      const userCount = await db.query('SELECT COUNT(*)::int AS c FROM users');
-      const vaultCount = await db.query('SELECT COUNT(*)::int AS c FROM vaults');
+      // 应只有 1 个用户、1 个保险库（限定 @register.test 域名，避免并行测试文件残留数据干扰）
+      const userCount = await db.query(
+        "SELECT COUNT(*)::int AS c FROM users WHERE email_normalized LIKE '%@register.test'",
+      );
+      const vaultCount = await db.query(
+        `SELECT COUNT(*)::int AS c FROM vaults WHERE user_id IN (
+           SELECT id FROM users WHERE email_normalized LIKE '%@register.test'
+         )`,
+      );
       expect(userCount.rows[0].c).toBe(1);
       expect(vaultCount.rows[0].c).toBe(1);
     });
