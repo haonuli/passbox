@@ -70,8 +70,8 @@
 | T1.2 | 数据库连接池单例 | ✅ 完成 | src/lib/db.ts (Pool 单例, max:10, globalThis 防重复) + db.test.ts (7 测试全通过) + vitest.config.ts + .env.test |
 | T1.3 | 数据库 DDL 迁移脚本 | ✅ 完成 | src/lib/migrate.ts (21 条幂等 DDL: 6 表+9 索引+3 触发器+3 预置数据) + migrate.test.ts (9 集成测试) + scripts/init-test-db.ts + npm run migrate/test:db:setup |
 | T1.4 | 全局类型定义 | ✅ 完成 | src/types/db.ts (6 Row 类型) + src/types/crypto.ts (EncryptedData/KdfConfig/KdfParams/StrengthResult) + src/types/api.ts (ActionResult/Register/Login/Prelogin/Session + Server Action 输入类型) |
-| T1.5 | 根布局与主题系统 | ⏳ 待开始 | — |
-| T1.6 | 中间件与路由守卫 | ⏳ 待开始 | — |
+| T1.5 | 根布局与主题系统 | ✅ 完成 | src/components/theme-provider.tsx (next-themes 封装: attribute=class/defaultTheme=system/enableSystem/disableTransitionOnChange) + src/components/theme-toggle.tsx (DropdownMenu + Sun/Moon 图标, 浅色/深色/跟随系统) + layout.tsx 挂载 ThemeProvider + Toaster (richColors/top-center) + page.tsx passbox 落地页；验收: tsc/eslint 零错误 / dev HTTP 200 / 深色模式 CSS 变量正确 (bodyBg: rgb(9,9,11)) / Toaster 已挂载 |
+| T1.6 | 中间件与路由守卫 | 🔄 进行中 | — |
 
 ### 阶段 5 · Stage 2：加密核心（T2.1-T2.6）— TDD-first
 
@@ -102,3 +102,5 @@
 | 2026-07-02 | T1.1 项目脚手架初始化与依赖安装 ✅ 完成。产出：Next.js 16.2.10 (Turbopack) + React 19.2.4 + TypeScript strict + Tailwind CSS v3 + shadcn/ui new-york（button/input/dialog/form/label/dropdown-menu/sonner 7 组件）+ pg/zustand/react-hook-form/zod/libsodium-wrappers-sumo/bcrypt/jose 等全量依赖；Vitest 4 + Playwright + Testing Library 测试工具链；.env.local + .env.example。验收：tsc --noEmit 零错误 / eslint 零错误 / dev server HTTP 200（177ms 启动） | 开发工程师 |
 | 2026-07-02 | T1.2 数据库连接池单例 ✅ 完成。产出：src/lib/db.ts（pg.Pool 单例, max:10, globalThis.__db 防热重载重复实例化）；vitest.config.ts（jsdom + React plugin + @ 路径别名 + 覆盖率配置）；tests/setup.ts（dotenv 加载 .env.test + jest-dom matchers）；src/lib/db.test.ts（7 集成测试全通过：max:10 配置 / SELECT 1 / 参数化查询 / 当前数据库验证 / globalThis 单例）；.env.test（passbox_test 数据库）。PostgreSQL 18.4 已运行。验收：M0-3 通过 | 开发工程师 |
 | 2026-07-02 | T1.3 数据库 DDL 迁移脚本 ✅ 完成。产出：src/lib/migrate.ts（21 条幂等 SQL：pgcrypto 扩展 + 6 表 CREATE IF NOT EXISTS + 9 索引 + update_updated_at 触发器函数 + 3 触发器 + item_types 预置数据 ON CONFLICT DO NOTHING）；src/lib/migrate.test.ts（9 集成测试全通过：6 表验证 / 3 条预置数据 / field_schema JSONB / 索引验证 / updated_at 触发器验证 / 幂等性验证）；scripts/init-test-db.ts（测试库重置脚本）；npm run migrate / npm run test:db:setup 命令。验收：M0-4 + M0-5 通过 | 开发工程师 |
+| 2026-07-02 | T1.4 全局类型定义 ✅ 完成。产出：src/types/db.ts（6 Row 类型: UserRow/VaultRow/ItemRow/ItemTypesRow/TagRow/ItemTagsRow，含 recovery_encrypted_key + kdf_salt: Buffer）；src/types/crypto.ts（EncryptedData v:1 + KdfConfig salt:Uint8Array + KdfParams API 传输 + StrengthResult）；src/types/api.ts（ActionResult 判别联合 + Register/Login/Prelogin/Session + CreateItemInput/UpdateItemInput）。验收：tsc 零错误 | 开发工程师 |
+| 2026-07-02 | T1.5 根布局与主题系统 ✅ 完成。产出：src/components/theme-provider.tsx（next-themes 封装: attribute=class / defaultTheme=system / enableSystem / disableTransitionOnChange）；src/components/theme-toggle.tsx（DropdownMenu + Sun/Moon 图标, 浅色/深色/跟随系统三选项）；layout.tsx 挂载 ThemeProvider + Toaster（richColors / position=top-center）；page.tsx 替换为 passbox 落地页（主题切换 + toast 测试入口）。验收：tsc/eslint 零错误 / dev server HTTP 200 / 深色模式 CSS 变量正确应用（--background: 240 10% 3.9%, bodyBg: rgb(9,9,11), bodyColor: rgb(250,250,250)）/ Toaster 已挂载（a11y 树 Notifications region 存在）/ 16 测试全通过 | 开发工程师 |
