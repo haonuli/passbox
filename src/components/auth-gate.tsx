@@ -22,6 +22,7 @@ import { useRouter, usePathname } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth-store';
 import { AppHeader } from '@/components/app-header';
+import { getSafeRedirect } from '@/lib/redirect';
 import type { SessionResponse } from '@/types/api';
 
 export function AuthGate({ children }: { children: React.ReactNode }) {
@@ -59,12 +60,16 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   }, [status, isUnlockPage, router]);
 
   // authenticated / locked → 跳转解锁页
+  // M-4 修复：携带 redirect 参数（当前 pathname），避免覆盖 useLock.lock() 设置的
+  // /unlock?redirect=/path，导致解锁后总是回到 /vault 而非原页面。
   useEffect(() => {
     if (isUnlockPage) return;
     if (status === 'authenticated' || status === 'locked') {
-      router.replace('/unlock');
+      const redirect = getSafeRedirect(pathname);
+      const unlockUrl = redirect === '/vault' ? '/unlock' : `/unlock?redirect=${encodeURIComponent(redirect)}`;
+      router.replace(unlockUrl);
     }
-  }, [status, isUnlockPage, router]);
+  }, [status, isUnlockPage, pathname, router]);
 
   // 解锁页直接渲染（不加顶栏，避免用户在解锁页操作锁定/退出造成混乱）
   if (isUnlockPage) {

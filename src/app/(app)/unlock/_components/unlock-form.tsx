@@ -25,6 +25,7 @@ import {
   FormMessage,
 } from '@/components/ui/form';
 import { useUnlock } from '@/hooks/use-unlock';
+import { getSafeRedirect } from '@/lib/redirect';
 
 const unlockSchema = z.object({
   masterPassword: z.string().min(1, '请输入主密码'),
@@ -43,20 +44,22 @@ export function UnlockForm() {
     defaultValues: { masterPassword: '' },
   });
 
-  // 解锁成功 → 跳转到 redirect 参数或默认 /vault
+  // 解锁成功 → 跳转到 redirect 参数或默认 /vault（M-2：校验防止开放重定向）
   useEffect(() => {
     if (status === 'success') {
-      const redirect = searchParams.get('redirect') ?? '/vault';
+      const redirect = getSafeRedirect(searchParams.get('redirect'));
       router.replace(redirect);
     }
   }, [status, searchParams, router]);
 
-  // 会话过期 → 跳转登录页
+  // 会话过期 → 跳转登录页（透传 redirect，登录后回到原页面）
   useEffect(() => {
     if (sessionExpired) {
-      router.replace('/login');
+      const redirect = getSafeRedirect(searchParams.get('redirect'));
+      const loginUrl = redirect === '/vault' ? '/login' : `/login?redirect=${encodeURIComponent(redirect)}`;
+      router.replace(loginUrl);
     }
-  }, [sessionExpired, router]);
+  }, [sessionExpired, searchParams, router]);
 
   const onSubmit = async (values: UnlockFormValues) => {
     await unlock(values.masterPassword);

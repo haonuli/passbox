@@ -26,6 +26,7 @@ import {
   FormMessage,
 } from '@/components/ui/form';
 import { useLogin } from '@/hooks/use-login';
+import { getSafeRedirect } from '@/lib/redirect';
 
 /** 登录表单校验 schema（主密码仅需非空，强度校验在注册阶段完成） */
 const loginSchema = z.object({
@@ -53,10 +54,10 @@ export function LoginForm() {
     },
   });
 
-  // 登录成功 → 跳转到 redirect 参数或默认 /vault
+  // 登录成功 → 跳转到 redirect 参数或默认 /vault（M-2：校验防止开放重定向）
   useEffect(() => {
     if (status === 'success') {
-      const redirect = searchParams.get('redirect') ?? '/vault';
+      const redirect = getSafeRedirect(searchParams.get('redirect'));
       router.replace(redirect);
     }
   }, [status, searchParams, router]);
