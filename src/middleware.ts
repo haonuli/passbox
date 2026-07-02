@@ -13,7 +13,10 @@ import { SESSION_COOKIE_NAME, verifySession } from '@/lib/session';
  */
 const CSP_HEADER = [
   "default-src 'self'",
-  "script-src 'self' 'wasm-unsafe-eval'",
+  // 开发模式需要 'unsafe-inline'（Next.js HMR + Turbopack 内联脚本）；生产模式应使用 nonce
+  process.env.NODE_ENV === 'development'
+    ? "script-src 'self' 'wasm-unsafe-eval' 'unsafe-inline'"
+    : "script-src 'self' 'wasm-unsafe-eval'",
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: https:",
   "connect-src 'self' https://api.pwnedpasswords.com",
