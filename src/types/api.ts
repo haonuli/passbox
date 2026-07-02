@@ -32,6 +32,15 @@ export type ActionResult<T = undefined> =
 
 /**
  * 注册请求
+ *
+ * ⚠️ 实现偏差（相对 TECHNICAL_DESIGN 5.2.1 / 7.1）：
+ * 设计文档写"服务端生成恢复码"，但客户端需要在注册请求中同时提交
+ * recoveryEncryptedKey（用恢复码派生 Recovery Key 加密的 Symmetric Key 副本）。
+ * 若服务端生成恢复码并返回，客户端需第二次请求上传 recoveryEncryptedKey，
+ * 存在中途断开导致恢复路径缺失的风险。因此改为客户端生成恢复码，
+ * 将 recoveryCode + recoveryEncryptedKey 一并提交，服务端仅做 bcrypt 哈希。
+ * 安全等价：服务端仍只存 bcrypt 哈希，明文恢复码仅在注册响应中返回一次。
+ *
  * @see TECHNICAL_DESIGN.md 5.2.1
  */
 export interface RegisterRequest {
@@ -43,6 +52,21 @@ export interface RegisterRequest {
   /** base64(16 bytes salt) */
   kdfSalt: string;
   kdfParams: KdfParams;
+  /**
+   * 恢复码明文（PBOX-XXXX-XXXX-XXXX-XXXX），客户端生成。
+   * 服务端 bcrypt 哈希后存入 recovery_code_hash，明文不落库。
+   */
+  recoveryCode: string;
+  /**
+   * Recovery Key 加密的 Symmetric Key 副本，用于主密码丢失后数据恢复。
+   * 客户端用恢复码派生 Recovery Key（HKDF），再加密 Symmetric Key 得到此密文。
+   */
+  recoveryEncryptedKey: EncryptedData;
+  /**
+   * 默认保险库名称密文（客户端用 Symmetric Key 加密，如 "个人保险库"）。
+   * 零知识架构下服务端无法加密，必须由客户端提供。
+   */
+  defaultVaultNameEncrypted: EncryptedData;
 }
 
 /**
