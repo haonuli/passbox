@@ -7,7 +7,10 @@
  *
  * 设计要点：
  *   - 懒加载：首次调用时创建 Worker 实例，后续复用
- *   - 并发安全：每次调用注册独立 message 监听器，完成后移除
+ *   - 并发安全（M-1 修复）：每次请求携带唯一 requestId，监听器
+ *     仅消费与自身 requestId 匹配的响应，避免并发调用互相串台
+ *     导致返回错误 Master Key（可造成永久数据丢失）
+ *   - 超时保护：30s 未响应自动 reject 并清理监听器，防止泄漏
  *   - 浏览器专用：Worker 仅在客户端实例化（SSR 时不创建）
  *
  * @see kdf.worker.ts, TECHNICAL_DESIGN.md 9.1
@@ -16,18 +19,26 @@ import type { KdfConfig } from './types';
 
 /** Worker 请求消息 */
 interface KdfWorkerRequest {
+  requestId: number;
   password: string;
   config: KdfConfig;
 }
 
 /** Worker 响应消息 */
 interface KdfWorkerResponse {
+  requestId: number;
   ok: boolean;
   masterKey?: Uint8Array;
   error?: string;
 }
 
+/** 派生超时（毫秒），正常 Argon2id 耗时 <2s，30s 兜底防止永久挂起 */
+const KDF_TIMEOUT_MS = 30_000;
+
 let workerInstance: Worker | null = null;
+
+/** 自增请求 ID，用于匹配请求与响应（解决单例 Worker 并发串台问题） */
+let nextRequestId = 1;
 
 /**
  * 获取或创建 KDF Worker 单例。
@@ -60,9 +71,25 @@ export function deriveMasterKeyViaWorker(
     }
 
     const worker = getWorker();
+    const requestId = nextRequestId++;
+    let settled = false;
+
+    const cleanup = (): void => {
+      worker.removeEventListener('message', handleMessage);
+      worker.removeEventListener('error', handleError);
+      clearTimeout(timer);
+    };
 
     const handleMessage = (e: MessageEvent<KdfWorkerResponse>): void => {
-      worker.removeEventListener('message', handleMessage);
+      // M-1 关键修复：仅消费与自身 requestId 匹配的响应，忽略其他请求的响应
+      if (e.data.requestId !== requestId) {
+        return;
+      }
+      if (settled) {
+        return;
+      }
+      settled = true;
+      cleanup();
       if (e.data.ok && e.data.masterKey) {
         resolve(e.data.masterKey);
       } else {
@@ -71,15 +98,27 @@ export function deriveMasterKeyViaWorker(
     };
 
     const handleError = (e: ErrorEvent): void => {
-      worker.removeEventListener('message', handleMessage);
-      worker.removeEventListener('error', handleError);
+      if (settled) {
+        return;
+      }
+      settled = true;
+      cleanup();
       reject(new Error(e.message ?? 'Worker 执行错误'));
     };
+
+    const timer = setTimeout(() => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      cleanup();
+      reject(new Error('KDF 派生超时'));
+    }, KDF_TIMEOUT_MS);
 
     worker.addEventListener('message', handleMessage);
     worker.addEventListener('error', handleError);
 
-    const request: KdfWorkerRequest = { password, config };
+    const request: KdfWorkerRequest = { requestId, password, config };
     worker.postMessage(request);
   });
 }
