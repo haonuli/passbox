@@ -42,8 +42,17 @@ export const SESSION_COOKIE_OPTIONS = {
 /**
  * JWT 签名密钥（从环境变量读取，jose 需 Uint8Array）。
  * ⚠️ 生产环境必须设置强随机值（≥32 字节）。
+ *
+ * M-12 修复：模块加载时校验 JWT_SECRET 存在且足够长。
+ * 缺失或过短时立即抛出（fail-fast），避免使用空密钥签发可伪造的 JWT。
  */
-const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET);
+const JWT_SECRET_RAW = process.env.JWT_SECRET;
+if (!JWT_SECRET_RAW || JWT_SECRET_RAW.length < 32) {
+  throw new Error(
+    '环境变量 JWT_SECRET 缺失或长度不足 32 字符，请设置强随机密钥（如 `openssl rand -base64 32`）',
+  );
+}
+const JWT_SECRET = new TextEncoder().encode(JWT_SECRET_RAW);
 
 /**
  * 会话 JWT 的 Payload 结构。

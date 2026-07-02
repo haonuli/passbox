@@ -204,4 +204,52 @@ describe('T1.6 middleware 集成测试', () => {
       expect(config.matcher.length).toBeGreaterThan(0);
     });
   });
+
+  describe('重定向响应安全头注入（M-10）', () => {
+    it('未认证重定向到 /login 的响应包含 CSP 头', async () => {
+      const req = createRequest('/vault');
+      const res = await middleware(req);
+      expect(res.status).toBe(307);
+      // M-10 修复前：重定向响应没有安全头；修复后应注入
+      expect(res.headers.has('Content-Security-Policy')).toBe(true);
+      expect(res.headers.get('X-Frame-Options')).toBe('DENY');
+      expect(res.headers.get('X-Content-Type-Options')).toBe('nosniff');
+    });
+
+    it('已认证重定向到 /vault 的响应包含 CSP 头', async () => {
+      mockedVerifySession.mockResolvedValueOnce(FAKE_SESSION);
+      const req = createRequest('/login', { cookie: 'fake-token' });
+      const res = await middleware(req);
+      expect(res.status).toBe(307);
+      expect(res.headers.has('Content-Security-Policy')).toBe(true);
+      expect(res.headers.get('X-Frame-Options')).toBe('DENY');
+    });
+  });
+
+  describe('HSTS 头（M-11）', () => {
+    it('开发环境不注入 HSTS（避免 localhost 被锁定）', async () => {
+      // 测试环境 NODE_ENV 非 production
+      const req = createRequest('/');
+      const res = await middleware(req);
+      expect(res.headers.has('Strict-Transport-Security')).toBe(false);
+    });
+
+    it('生产环境注入 HSTS', async () => {
+      const originalEnv = process.env.NODE_ENV;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (process.env as any).NODE_ENV = 'production';
+      try {
+        const req = createRequest('/');
+        const res = await middleware(req);
+        const hsts = res.headers.get('Strict-Transport-Security');
+        expect(hsts).not.toBeNull();
+        expect(hsts).toContain('max-age=63072000');
+        expect(hsts).toContain('includeSubDomains');
+        expect(hsts).toContain('preload');
+      } finally {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (process.env as any).NODE_ENV = originalEnv;
+      }
+    });
+  });
 });
