@@ -12,14 +12,21 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Loader2 } from 'lucide-react';
 import Link from 'next/link';
+import dynamic from 'next/dynamic';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { PasswordInput } from '@/components/password-input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { useRegister } from '@/hooks/use-register';
-import { StrengthIndicator } from '@/components/common/strength-indicator';
 import { EmergencyKit } from './emergency-kit';
+
+// zxcvbn-ts 在 SSR 时会尝试读取文件系统中的字典文件导致 500 错误，
+// 使用 dynamic + ssr:false 确保仅在客户端加载
+const StrengthIndicator = dynamic(
+  () => import('@/components/common/strength-indicator').then((m) => m.StrengthIndicator),
+  { ssr: false },
+);
 
 /** 注册表单校验 schema */
 const registerSchema = z
