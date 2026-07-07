@@ -150,20 +150,32 @@ const SEED_ITEM_TYPES_SQL = `
 
 /**
  * 执行全部数据库迁移
+ *
+ * 使用 Promise 缓存确保并发调用时只执行一次（修复集成测试并发迁移冲突）。
  * @returns 创建/跳过的语句数量
  */
-export async function runMigrations(): Promise<{ scriptsExecuted: number }> {
-  let scriptsExecuted = 0;
+let migrationPromise: Promise<{ scriptsExecuted: number }> | null = null;
 
-  for (const sql of DDL_SCRIPTS) {
-    await db.query(sql);
-    scriptsExecuted++;
+export async function runMigrations(): Promise<{ scriptsExecuted: number }> {
+  if (migrationPromise) {
+    return migrationPromise;
   }
 
-  await db.query(SEED_ITEM_TYPES_SQL);
-  scriptsExecuted++;
+  migrationPromise = (async () => {
+    let scriptsExecuted = 0;
 
-  return { scriptsExecuted };
+    for (const sql of DDL_SCRIPTS) {
+      await db.query(sql);
+      scriptsExecuted++;
+    }
+
+    await db.query(SEED_ITEM_TYPES_SQL);
+    scriptsExecuted++;
+
+    return { scriptsExecuted };
+  })();
+
+  return migrationPromise;
 }
 
 // 脚本直接执行时（npm run migrate）

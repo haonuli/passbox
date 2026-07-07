@@ -77,18 +77,16 @@ function installFakeWorker(): void {
     },
   };
   originalWorker = globalThis.Worker;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   globalThis.Worker = function () {
     return fakeWorker;
-  } as any;
+  } as unknown as typeof Worker;
 }
 
 function restoreWorker(): void {
   if (originalWorker !== undefined) {
     globalThis.Worker = originalWorker;
   } else {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    delete (globalThis as any).Worker;
+    delete (globalThis as Record<string, unknown>).Worker;
   }
 }
 
