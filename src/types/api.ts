@@ -165,6 +165,10 @@ export interface RecoverVerifyResponse {
 
 /**
  * 恢复码重置请求（恢复流程第二阶段）
+ *
+ * M-15：恢复码轮换 — 重置主密码同时生成新恢复码，
+ * 旧恢复码失效，防止恢复码被重复利用。
+ *
  * @see TECHNICAL_DESIGN.md 3.3.1
  */
 export interface RecoverRequest {
@@ -178,11 +182,17 @@ export interface RecoverRequest {
   /** base64(16 bytes 新 salt) */
   newKdfSalt: string;
   newKdfParams: KdfParams;
+  /** M-15：新恢复码明文，服务端 bcrypt 哈希后替换旧 recovery_code_hash */
+  newRecoveryCode: string;
+  /** M-15：新 Recovery Key 加密的 Symmetric Key 副本，替换旧 recovery_encrypted_key */
+  newRecoveryEncryptedKey: EncryptedData;
 }
 
 /** 恢复码重置响应（设置新会话 Cookie） */
 export interface RecoverResponse {
   user: { id: string; email: string };
+  /** M-15：轮换后的新恢复码，仅返回一次，需展示给用户保存 */
+  recoveryCode: string;
 }
 
 /**

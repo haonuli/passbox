@@ -4,7 +4,8 @@
  * POST /api/auth/recover
  *
  * 客户端在阶段一解密 Symmetric Key 后，用新主密码重新加密，提交：
- *   { email, recoveryCode, newAuthHash, newEncryptedKey, newKdfSalt, newKdfParams }
+ *   { email, recoveryCode, newAuthHash, newEncryptedKey, newKdfSalt, newKdfParams,
+ *     newRecoveryCode, newRecoveryEncryptedKey }
  *
  * 服务端再次 bcrypt.compare 验证恢复码（独立验证，不依赖阶段一状态），
  * 验证通过后更新 password_hash / encrypted_key / kdf_salt / kdf_params，
@@ -13,7 +14,8 @@
  * 安全机制：
  * - 防枚举：邮箱不存在时 dummy bcrypt 均衡时间，统一"恢复码无效"
  * - 重置后清空 failed_login_attempts / locked_until
- * - recovery_code_hash / recovery_encrypted_key 不变（恢复码仍可用，轮换为可选增强）
+ * - M-15：恢复码轮换 — 旧 recovery_code_hash / recovery_encrypted_key 被新值替换，
+ *   旧恢复码立即失效，防止恢复码被重复利用
  *
  * @see TECHNICAL_DESIGN.md 3.3.1 恢复码密钥路径
  */
@@ -38,6 +40,7 @@ const DUMMY_RECOVERY_HASH = bcrypt.hashSync('dummy-recovery-code-for-timing', 10
  *
  * M-7：newKdfSalt 强制 base64 + 16 字节校验
  * M-8：newKdfParams 强制最低安全阈值
+ * M-15：newRecoveryCode + newRecoveryEncryptedKey 恢复码轮换
  */
 const recoverSchema = z.object({
   email: z.string().trim().email('邮箱格式无效'),
@@ -49,6 +52,11 @@ const recoverSchema = z.object({
   newEncryptedKey: encryptedDataSchema,
   newKdfSalt: kdfSaltSchema,
   newKdfParams: kdfParamsSchema,
+  newRecoveryCode: z
+    .string()
+    .min(1)
+    .refine(isValidRecoveryCodeFormat, '新恢复码格式无效'),
+  newRecoveryEncryptedKey: encryptedDataSchema,
 });
 
 /** 统一错误信息（不区分邮箱不存在 vs 恢复码错误） */
@@ -71,8 +79,16 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       );
     }
 
-    const { email, recoveryCode, newAuthHash, newEncryptedKey, newKdfSalt, newKdfParams } =
-      parsed.data;
+    const {
+      email,
+      recoveryCode,
+      newAuthHash,
+      newEncryptedKey,
+      newKdfSalt,
+      newKdfParams,
+      newRecoveryCode,
+      newRecoveryEncryptedKey,
+    } = parsed.data;
     const emailNormalized = email.toLowerCase();
 
     const result = await db.query(
@@ -99,8 +115,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       );
     }
 
-    // 验证通过：重置主密码相关字段，并递增 token_version 撤销所有旧会话（M-9）
-    const newpasswordHash = await bcrypt.hash(newAuthHash, 10);
+    // 验证通过：重置主密码 + 轮换恢复码（M-15），递增 token_version 撤销旧会话（M-9）
+    const newPasswordHash = await bcrypt.hash(newAuthHash, 10);
+    const newRecoveryCodeHash = await bcrypt.hash(newRecoveryCode, 10);
 
     const updateResult = await db.query(
       `UPDATE users
@@ -110,19 +127,23 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
            kdf_memory_kib = $4,
            kdf_iterations = $5,
            kdf_parallelism = $6,
+           recovery_code_hash = $7,
+           recovery_encrypted_key = $8,
            failed_login_attempts = 0,
            locked_until = NULL,
            token_version = token_version + 1,
            updated_at = NOW()
-       WHERE id = $7
+       WHERE id = $9
        RETURNING token_version`,
       [
-        newpasswordHash,
+        newPasswordHash,
         JSON.stringify(newEncryptedKey),
         Buffer.from(newKdfSalt, 'base64'),
         newKdfParams.memoryKib,
         newKdfParams.iterations,
         newKdfParams.parallelism,
+        newRecoveryCodeHash,
+        JSON.stringify(newRecoveryEncryptedKey),
         user.id,
       ],
     );
@@ -133,6 +154,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
     const response: RecoverResponse = {
       user: { id: user.id as string, email: user.email as string },
+      recoveryCode: newRecoveryCode,
     };
     const res = NextResponse.json(response, { status: 200 });
     res.cookies.set(SESSION_COOKIE_NAME, token, SESSION_COOKIE_OPTIONS);

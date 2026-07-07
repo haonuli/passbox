@@ -14,27 +14,34 @@
  *   4. decryptSymmetricKeyWithRecovery(recoveryKey, recoveryEncryptedKey)
  *      → Symmetric Key CryptoKey（恢复码错误或密文损坏时 GCM 认证失败）
  *
- * 阶段二 · 用新主密码重新加密并提交
+ * 阶段二 · 用新主密码重新加密 + 轮换恢复码 + 提交重置
  *   5. generateKdfSalt() → 16 字节新 salt（每次重置换新 salt）
  *   6. deriveMasterKeyViaWorker(newPassword, config) → 32 字节新 Master Key
  *   7. encryptSymmetricKey(newMasterKey, symmetricKey) → newEncryptedKey
  *   8. deriveAuthHash(newMasterKey, email) → 32 字节 newAuthHash
- *   9. POST /api/auth/recover { email, recoveryCode, newAuthHash,
- *                               newEncryptedKey, newKdfSalt, newKdfParams }
- *      → { user }（设置新会话 Cookie）
- *  10. auth-store setAuthenticated + unlock → 跳转 /vault
+ *   9. M-15：generateRecoveryCode() → 新恢复码 + raw 字节
+ *  10. M-15：deriveRecoveryKey(newRaw, email) → 新 Recovery Key
+ *  11. M-15：encryptSymmetricKeyWithRecovery(newRecoveryKey, symmetricKey)
+ *       → newRecoveryEncryptedKey
+ *  12. POST /api/auth/recover { email, recoveryCode, newAuthHash,
+ *       newEncryptedKey, newKdfSalt, newKdfParams, newRecoveryCode,
+ *       newRecoveryEncryptedKey }
+ *       → { user, recoveryCode }（设置新会话 Cookie，返回新恢复码）
+ *  13. auth-store setAuthenticated + unlock
+ *  14. 返回新恢复码供 UI 展示（用户需重新保存）
  *
  * 安全保证：
  *   - 恢复码明文仅在客户端使用，阶段一/二均由服务端 bcrypt.compare 验证
  *   - 新主密码派生的 Master Key 永不上传，仅上传 newAuthHash（HKDF 双重派生）
  *   - Symmetric Key 不变，历史数据零丢失
+ *   - M-15：恢复码轮换 — 旧恢复码使用后立即失效，新恢复码返回给用户
  *
  * @see TECHNICAL_DESIGN.md 3.3.1 恢复码密钥路径, 7.4 恢复数据流
  */
 'use client';
 
 import { useState, useCallback } from 'react';
-import { parseRecoveryCode } from '@/lib/recovery-code';
+import { parseRecoveryCode, generateRecoveryCode } from '@/lib/recovery-code';
 import { deriveRecoveryKey, deriveAuthHash } from '@/lib/crypto/hkdf';
 import {
   generateKdfSalt,
@@ -45,6 +52,7 @@ import { deriveMasterKeyViaWorker } from '@/lib/crypto/kdf-worker-client';
 import {
   decryptSymmetricKeyWithRecovery,
   encryptSymmetricKey,
+  encryptSymmetricKeyWithRecovery,
 } from '@/lib/crypto/keys';
 import { toBase64, zeroFill } from '@/lib/crypto/encoding';
 import { useAuthStore } from '@/stores/auth-store';
@@ -67,6 +75,8 @@ export type RecoverStatus =
 export interface UseRecoverReturn {
   status: RecoverStatus;
   error: string | null;
+  /** M-15：恢复成功后的新恢复码，需展示给用户保存 */
+  newRecoveryCode: string | null;
   /** 执行恢复码重置主密码 */
   recover: (
     email: string,
@@ -83,6 +93,7 @@ const RECOVER_FAILED_MSG = '恢复码无效，无法恢复账户';
 export function useRecover(): UseRecoverReturn {
   const [status, setStatus] = useState<RecoverStatus>('idle');
   const [error, setError] = useState<string | null>(null);
+  const [newRecoveryCode, setNewRecoveryCode] = useState<string | null>(null);
 
   const recover = useCallback(
     async (
@@ -92,11 +103,15 @@ export function useRecover(): UseRecoverReturn {
     ) => {
       setStatus('verifying');
       setError(null);
+      setNewRecoveryCode(null);
 
       // M-14：敏感密钥材料声明在 try 外，catch 中零填充防止内存遗留
       let recoveryCodeRaw: Uint8Array | null = null;
       let recoveryKey: Uint8Array | null = null;
       let newMasterKey: Uint8Array | null = null;
+      // M-15：新恢复码相关密钥材料
+      let newRecoveryCodeRaw: Uint8Array | null = null;
+      let newRecoveryKey: Uint8Array | null = null;
 
       try {
         // ---- 阶段一：验证恢复码 + 解密 Symmetric Key ----
@@ -136,7 +151,7 @@ export function useRecover(): UseRecoverReturn {
           throw new Error(RECOVER_FAILED_MSG);
         }
 
-        // ---- 阶段二：新主密码重新加密 + 提交重置 ----
+        // ---- 阶段二：新主密码重新加密 + 轮换恢复码（M-15）+ 提交重置 ----
 
         setStatus('deriving');
 
@@ -160,7 +175,16 @@ export function useRecover(): UseRecoverReturn {
         const newAuthHashBytes = await deriveAuthHash(newMasterKey, email);
         const newAuthHash = toBase64(newAuthHashBytes);
 
-        // 9. 提交重置请求
+        // 9-11. M-15：生成新恢复码并加密 Symmetric Key 副本
+        const { raw: newRaw, formatted: newRecoveryCodeFormatted } = generateRecoveryCode();
+        newRecoveryCodeRaw = newRaw;
+        newRecoveryKey = await deriveRecoveryKey(newRecoveryCodeRaw, email);
+        const newRecoveryEncryptedKey = await encryptSymmetricKeyWithRecovery(
+          newRecoveryKey,
+          symmetricKey,
+        );
+
+        // 12. 提交重置请求（含新恢复码密文）
         setStatus('submitting');
         const recoverBody: RecoverRequest = {
           email,
@@ -169,6 +193,8 @@ export function useRecover(): UseRecoverReturn {
           newEncryptedKey,
           newKdfSalt: toBase64(newKdfSalt),
           newKdfParams: DEFAULT_KDF_PARAMS,
+          newRecoveryCode: newRecoveryCodeFormatted,
+          newRecoveryEncryptedKey,
         };
         const recoverRes = await fetch('/api/auth/recover', {
           method: 'POST',
@@ -185,7 +211,7 @@ export function useRecover(): UseRecoverReturn {
 
         const recoverData: RecoverResponse = await recoverRes.json();
 
-        // 10. 更新 auth-store：authenticated → unlocked
+        // 13. 更新 auth-store：authenticated → unlocked
         // newMasterKey 所有权转移给 store，store 负责 lock/logout 时零填充
         useAuthStore
           .getState()
@@ -198,15 +224,21 @@ export function useRecover(): UseRecoverReturn {
         useAuthStore.getState().unlock(newMasterKey, symmetricKey);
         newMasterKey = null; // 所有权已转移，避免 catch 误清
 
+        // 14. 返回新恢复码供 UI 展示
+        setNewRecoveryCode(newRecoveryCodeFormatted);
         setStatus('success');
       } catch (e) {
         // M-14：错误路径下零填充敏感密钥材料，防止内存遗留
         zeroFill(recoveryCodeRaw);
         zeroFill(recoveryKey);
         zeroFill(newMasterKey);
+        zeroFill(newRecoveryCodeRaw);
+        zeroFill(newRecoveryKey);
         recoveryCodeRaw = null;
         recoveryKey = null;
         newMasterKey = null;
+        newRecoveryCodeRaw = null;
+        newRecoveryKey = null;
         setError(e instanceof Error ? e.message : '恢复失败，请稍后重试');
         setStatus('error');
       }
@@ -217,7 +249,8 @@ export function useRecover(): UseRecoverReturn {
   const reset = useCallback(() => {
     setStatus('idle');
     setError(null);
+    setNewRecoveryCode(null);
   }, []);
 
-  return { status, error, recover, reset };
+  return { status, error, newRecoveryCode, recover, reset };
 }
