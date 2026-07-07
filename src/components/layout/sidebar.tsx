@@ -1,15 +1,18 @@
 /**
- * 应用侧边栏 (T4.3)
+ * 应用侧边栏 (T4.3 / T6.4 / T6.5)
  *
  * 导航入口：密码库、安全中心、密码生成器、设置。
- * 桌面端常驻左侧，移动端可折叠（通过 Props 控制开关）。
+ * T6.4: 标签列表，点击筛选对应条目
+ * T6.5: 保险库列表，点击切换当前查看的库
+ * 桌面端常驻左侧，移动端可折叠。
  */
 'use client';
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Vault, Shield, KeyRound, Settings } from 'lucide-react';
+import { Vault, Shield, KeyRound, Settings, Tag, FolderOpen } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useVaultStore } from '@/stores/vault-store';
 
 interface NavItem {
   href: string;
@@ -25,18 +28,17 @@ const NAV_ITEMS: NavItem[] = [
 ];
 
 interface SidebarProps {
-  /** 移动端是否展开 */
   mobileOpen: boolean;
-  /** 关闭移动端侧边栏 */
   onClose: () => void;
 }
 
 export function Sidebar({ mobileOpen, onClose }: SidebarProps) {
   const pathname = usePathname();
+  const vaults = useVaultStore((s) => s.vaults);
+  const tags = useVaultStore((s) => s.tags);
 
   return (
     <>
-      {/* 移动端遮罩 */}
       {mobileOpen && (
         <div
           className="fixed inset-0 z-40 bg-black/50 md:hidden"
@@ -57,7 +59,7 @@ export function Sidebar({ mobileOpen, onClose }: SidebarProps) {
         </div>
 
         {/* 导航 */}
-        <nav className="flex-1 space-y-1 p-3">
+        <nav className="space-y-1 p-3">
           {NAV_ITEMS.map((item) => {
             const Icon = item.icon;
             const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
@@ -79,6 +81,52 @@ export function Sidebar({ mobileOpen, onClose }: SidebarProps) {
             );
           })}
         </nav>
+
+        {/* 保险库列表 (T6.5) */}
+        {vaults.length > 0 && (
+          <div className="border-t border-border px-3 py-2">
+            <div className="mb-1 flex items-center gap-2 px-2 text-xs font-medium text-muted-foreground">
+              <FolderOpen className="h-3 w-3" />
+              保险库
+            </div>
+            <div className="space-y-0.5">
+              {vaults.map((vault) => (
+                <Link
+                  key={vault.id}
+                  href={`/vault?vaultId=${vault.id}`}
+                  onClick={onClose}
+                  className="block truncate rounded-md px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                >
+                  {vault.name}
+                </Link>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* 标签列表 (T6.4) */}
+        {tags.length > 0 && (
+          <div className="border-t border-border px-3 py-2">
+            <div className="mb-1 flex items-center gap-2 px-2 text-xs font-medium text-muted-foreground">
+              <Tag className="h-3 w-3" />
+              标签
+            </div>
+            <div className="flex flex-wrap gap-1 px-1">
+              {tags.map((tag) => (
+                <Link
+                  key={tag.id}
+                  href={`/vault?tagId=${tag.id}`}
+                  onClick={onClose}
+                  className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground transition-colors hover:bg-primary hover:text-primary-foreground"
+                >
+                  {tag.name}
+                </Link>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div className="flex-1" />
       </aside>
     </>
   );

@@ -25,7 +25,8 @@ import {
   SESSION_COOKIE_NAME,
   SESSION_COOKIE_OPTIONS,
 } from '@/lib/session';
-import type { LoginResponse } from '@/types/api';
+import { createTicket } from '@/lib/2fa-ticket';
+import type { LoginResponse, TotpChallengeResponse } from '@/types/api';
 import type { EncryptedData } from '@/types/crypto';
 
 /** 连续失败次数上限，达到后锁定账户 */
@@ -165,6 +166,17 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
        WHERE id = $1`,
       [user.id],
     );
+
+    // 2FA 检查（T6.2）：用户开启了 2FA 时，不直接签发会话，
+    // 而是返回 202 + ticket，客户端需完成 TOTP 验证才能登录。
+    if (user.two_factor_enabled) {
+      const ticket = createTicket(user.id as string);
+      const challenge: TotpChallengeResponse = {
+        challenge: 'totp_required',
+        ticket,
+      };
+      return NextResponse.json(challenge, { status: 202 });
+    }
 
     // 签发会话 Cookie（携带当前 token_version，M-9 撤销机制）
     const token = await createSession(

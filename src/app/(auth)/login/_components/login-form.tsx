@@ -27,6 +27,7 @@ import {
 } from '@/components/ui/form';
 import { useLogin } from '@/hooks/use-login';
 import { getSafeRedirect } from '@/lib/redirect';
+import { TotpChallenge } from './totp-challenge';
 
 /** 登录表单校验 schema（主密码仅需非空，强度校验在注册阶段完成） */
 const loginSchema = z.object({
@@ -41,7 +42,7 @@ const loginSchema = z.object({
 type LoginFormValues = z.infer<typeof loginSchema>;
 
 export function LoginForm() {
-  const { status, error, login } = useLogin();
+  const { status, error, login, totpChallenge, completeTotpChallenge } = useLogin();
   const [showPassword, setShowPassword] = useState(false);
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -61,6 +62,17 @@ export function LoginForm() {
       router.replace(redirect);
     }
   }, [status, searchParams, router]);
+
+  // 2FA 挑战：密码已验证，渲染 TOTP 验证码输入组件
+  if (status === 'totp_required' && totpChallenge) {
+    return (
+      <TotpChallenge
+        ticket={totpChallenge.ticket}
+        email={form.getValues('email')}
+        onSuccess={completeTotpChallenge}
+      />
+    );
+  }
 
   const onSubmit = async (values: LoginFormValues) => {
     await login(values.email, values.masterPassword);

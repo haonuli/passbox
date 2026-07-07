@@ -19,7 +19,7 @@
  */
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { deriveMasterKeyViaWorker } from '@/lib/crypto/kdf-worker-client';
 import { buildKdfConfig } from '@/lib/crypto/kdf';
 import { deriveAuthHash } from '@/lib/crypto/hkdf';
@@ -30,6 +30,7 @@ import type {
   LoginRequest,
   LoginResponse,
   PreloginResponse,
+  TotpChallengeResponse,
   ApiErrorResponse,
 } from '@/types/api';
 
@@ -39,6 +40,7 @@ export type LoginStatus =
   | 'preloging'
   | 'deriving'
   | 'submitting'
+  | 'totp_required'
   | 'success'
   | 'error';
 
@@ -47,8 +49,18 @@ export interface UseLoginReturn {
   error: string | null;
   /** 账户锁定时的解锁时间（ISO 字符串），用于 UI 展示倒计时 */
   lockedUntil: string | null;
+  /** 2FA 挑战信息（login 返回 202 时携带 ticket） */
+  totpChallenge: { ticket: string } | null;
   /** 执行登录 */
   login: (email: string, masterPassword: string) => Promise<void>;
+  /**
+   * 完成 2FA 验证后的登录流程。
+   *
+   * TOTP 组件调用 /api/auth/2fa/verify 获取 LoginResponse 后，
+   * 调用本方法用 login 阶段保留的 masterKey 解密 Symmetric Key，
+   * 并更新 auth-store（authenticated → unlocked）。
+   */
+  completeTotpChallenge: (response: LoginResponse) => Promise<void>;
   /** 重置状态 */
   reset: () => void;
 }
@@ -72,6 +84,16 @@ export function useLogin(): UseLoginReturn {
   const [status, setStatus] = useState<LoginStatus>('idle');
   const [error, setError] = useState<string | null>(null);
   const [lockedUntil, setLockedUntil] = useState<string | null>(null);
+  const [totpChallenge, setTotpChallenge] = useState<{ ticket: string } | null>(null);
+
+  /**
+   * 2FA 流程中保留的 Master Key。
+   *
+   * login 阶段派生 masterKey 后若收到 202（需要 TOTP），
+   * 将 masterKey 存入此 ref，completeTotpChallenge 时取出解密。
+   * reset / completeTotpChallenge 后零填充清除。
+   */
+  const masterKeyRef = useRef<Uint8Array | null>(null);
 
   const login = useCallback(async (email: string, masterPassword: string) => {
     setStatus('preloging');
@@ -125,6 +147,17 @@ export function useLogin(): UseLoginReturn {
         throw new Error(err.error ?? INVALID_CREDENTIALS_MSG);
       }
 
+      // 2FA 挑战（HTTP 202）：密码已验证，需 TOTP 验证码
+      if (loginRes.status === 202) {
+        const challenge: TotpChallengeResponse = await loginRes.json();
+        // 保留 masterKey 供 completeTotpChallenge 解密使用
+        masterKeyRef.current = masterKey;
+        masterKey = null; // 所有权转移到 ref，避免 catch 误清
+        setTotpChallenge({ ticket: challenge.ticket });
+        setStatus('totp_required');
+        return;
+      }
+
       // 5. 解密 Symmetric Key
       const data: LoginResponse = await loginRes.json();
       const symmetricKey = await decryptSymmetricKey(masterKey, data.encryptedKey);
@@ -148,11 +181,52 @@ export function useLogin(): UseLoginReturn {
     }
   }, []);
 
+  /**
+   * 完成 2FA 验证后的登录流程。
+   *
+   * TOTP 组件调用 /api/auth/2fa/verify 成功后，将 LoginResponse 传入。
+   * 使用 login 阶段保留的 masterKey 解密 Symmetric Key，
+   * 更新 auth-store（authenticated → unlocked），最后零填充 masterKey。
+   */
+  const completeTotpChallenge = useCallback(async (response: LoginResponse) => {
+    const masterKey = masterKeyRef.current;
+    if (!masterKey) {
+      setError('登录会话已过期，请重新登录');
+      setStatus('error');
+      return;
+    }
+
+    try {
+      // 解密 Symmetric Key
+      const symmetricKey = await decryptSymmetricKey(masterKey, response.encryptedKey);
+
+      // 更新 auth-store：authenticated → unlocked
+      useAuthStore
+        .getState()
+        .setAuthenticated(response.user, response.encryptedKey, response.kdfSalt, response.kdfParams);
+      useAuthStore.getState().unlock(masterKey, symmetricKey);
+
+      setStatus('success');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '2FA 验证失败，请稍后重试');
+      setStatus('error');
+    } finally {
+      // 无论成功失败，masterKey 已使用完毕（成功时所有权转移给 store），零填充清除
+      zeroFill(masterKeyRef.current);
+      masterKeyRef.current = null;
+      setTotpChallenge(null);
+    }
+  }, []);
+
   const reset = useCallback(() => {
     setStatus('idle');
     setError(null);
     setLockedUntil(null);
+    setTotpChallenge(null);
+    // 清理可能残留的 masterKey
+    zeroFill(masterKeyRef.current);
+    masterKeyRef.current = null;
   }, []);
 
-  return { status, error, lockedUntil, login, reset };
+  return { status, error, lockedUntil, totpChallenge, login, completeTotpChallenge, reset };
 }

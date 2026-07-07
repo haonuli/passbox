@@ -44,7 +44,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
     // 查询用户加密参数
     const result = await db.query(
-      `SELECT email, encrypted_key, kdf_salt, kdf_memory_kib, kdf_iterations, kdf_parallelism
+      `SELECT email, encrypted_key, kdf_salt, kdf_memory_kib, kdf_iterations, kdf_parallelism,
+              two_factor_enabled
        FROM users WHERE id = $1`,
       [userId],
     );
@@ -69,6 +70,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         iterations: user.kdf_iterations as number,
         parallelism: user.kdf_parallelism as number,
       },
+      twoFactorEnabled: user.two_factor_enabled as boolean,
     };
 
     return NextResponse.json(response, { status: 200 });

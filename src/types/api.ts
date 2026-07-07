@@ -133,6 +133,8 @@ export interface SessionResponse {
   encryptedKey: EncryptedData;
   kdfSalt: string;
   kdfParams: KdfParams;
+  /** 是否已开启 2FA（T6.1） */
+  twoFactorEnabled: boolean;
 }
 
 /**
