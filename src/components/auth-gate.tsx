@@ -1,9 +1,9 @@
 /**
- * 应用路由组客户端守卫 (T3.7)
+ * 应用路由组客户端守卫 (T3.7 / T4.3)
  *
  * 配合 (app)/layout.tsx 的 Server Component 会话校验，处理客户端 auth-store 状态：
  *
- * - status === 'unlocked'：渲染 AppHeader + 子内容（正常使用密码库）
+ * - status === 'unlocked'：渲染 Sidebar + AppHeader + 子内容（正常使用密码库）
  * - status === 'locked'：会话有效但密钥已清除 → 跳转 /unlock
  * - status === 'authenticated'：会话有效但密钥未加载（如 setAuthenticated 后）→ 跳转 /unlock
  * - status === 'unauthenticated'：页面刷新后 store 重置，需调用 GET /api/auth/session
@@ -17,11 +17,12 @@
  */
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth-store';
 import { AppHeader } from '@/components/app-header';
+import { Sidebar } from '@/components/layout/sidebar';
 import { getSafeRedirect } from '@/lib/redirect';
 import type { SessionResponse } from '@/types/api';
 
@@ -30,6 +31,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const status = useAuthStore((s) => s.status);
   const checkedRef = useRef(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // 解锁页不经过守卫
   const isUnlockPage = pathname === '/unlock';
@@ -76,12 +78,15 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
     return <>{children}</>;
   }
 
-  // 已解锁：渲染顶栏 + 内容
+  // 已解锁：渲染侧边栏 + 顶栏 + 内容
   if (status === 'unlocked') {
     return (
-      <div className="flex flex-1 flex-col bg-background">
-        <AppHeader />
-        <div className="flex flex-1">{children}</div>
+      <div className="flex h-screen overflow-hidden bg-background">
+        <Sidebar mobileOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+        <div className="flex flex-1 flex-col overflow-hidden">
+          <AppHeader onOpenSidebar={() => setSidebarOpen(true)} />
+          <main className="flex-1 overflow-auto">{children}</main>
+        </div>
       </div>
     );
   }

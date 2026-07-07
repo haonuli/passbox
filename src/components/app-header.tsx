@@ -1,28 +1,41 @@
 /**
- * 应用顶栏 (T3.7)
+ * 应用顶栏 (T4.3 / T4.7)
  *
- * 客户端组件，包含：
- * - 手动锁定按钮（useLock().lock，触发 auth-store.lock + 跳转 /unlock）
- * - 自动锁定计时器（useLock 内部启用，仅在 unlocked 状态生效）
- * - 退出登录（POST /api/auth/logout + 清除 store + 跳转 /login）
+ * 包含：
+ * - 移动端侧边栏切换按钮（hamburger）
+ * - 搜索框（T4.7，连接 vault-store.searchQuery，本地搜索不上传服务端）
+ * - 手动锁定按钮
+ * - 退出登录
  * - 主题切换
- *
- * 仅在 AuthGate 判定 status === 'unlocked' 时渲染。
+ * - 用户邮箱展示
  */
 'use client';
 
-import { useCallback } from 'react';
+import { useCallback, useDeferredValue } from 'react';
 import { useRouter } from 'next/navigation';
-import { Lock, LogOut } from 'lucide-react';
+import { Menu, Lock, LogOut, Search, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { useLock } from '@/hooks/use-lock';
 import { useAuthStore } from '@/stores/auth-store';
+import { useVaultStore } from '@/stores/vault-store';
 
-export function AppHeader() {
+interface AppHeaderProps {
+  /** 打开移动端侧边栏 */
+  onOpenSidebar: () => void;
+}
+
+export function AppHeader({ onOpenSidebar }: AppHeaderProps) {
   const router = useRouter();
   const { lock } = useLock();
   const user = useAuthStore((s) => s.user);
+  const searchQuery = useVaultStore((s) => s.searchQuery);
+  const setSearchQuery = useVaultStore((s) => s.setSearchQuery);
+  const loaded = useVaultStore((s) => s.loaded);
+
+  // useDeferredValue 优化搜索输入性能（T4.7）
+  const deferredQuery = useDeferredValue(searchQuery);
 
   const handleLogout = useCallback(async () => {
     try {
@@ -34,22 +47,68 @@ export function AppHeader() {
     router.replace('/login');
   }, [router]);
 
+  const handleSearchChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      setSearchQuery(e.target.value);
+      // 如果不在 /vault 页面，输入搜索时跳转到密码库
+      if (e.target.value && window.location.pathname !== '/vault') {
+        router.push('/vault');
+      }
+    },
+    [setSearchQuery, router],
+  );
+
+  const handleClearSearch = useCallback(() => {
+    setSearchQuery('');
+  }, [setSearchQuery]);
+
   return (
-    <header className="flex items-center justify-between border-b border-border px-6 py-3">
-      <div className="flex items-center gap-2">
-        <span className="text-sm font-medium text-foreground">passbox</span>
-        {user && (
-          <span className="text-xs text-muted-foreground">{user.email}</span>
+    <header className="flex h-14 items-center gap-3 border-b border-border px-4">
+      {/* 移动端菜单按钮 */}
+      <Button
+        size="icon"
+        variant="ghost"
+        className="md:hidden"
+        onClick={onOpenSidebar}
+        aria-label="打开菜单"
+      >
+        <Menu className="h-5 w-5" />
+      </Button>
+
+      {/* 搜索框 — T4.7 本地搜索 */}
+      <div className="relative flex-1 max-w-md">
+        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <Input
+          type="search"
+          placeholder="搜索条目…"
+          className="pl-9 pr-8"
+          value={deferredQuery}
+          onChange={handleSearchChange}
+          disabled={!loaded}
+        />
+        {searchQuery && (
+          <button
+            type="button"
+            onClick={handleClearSearch}
+            className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+            aria-label="清除搜索"
+          >
+            <X className="h-4 w-4" />
+          </button>
         )}
       </div>
-      <div className="flex items-center gap-2">
+
+      <div className="ml-auto flex items-center gap-2">
+        {user && (
+          <span className="hidden text-xs text-muted-foreground sm:inline">{user.email}</span>
+        )}
         <Button size="sm" variant="ghost" onClick={lock} aria-label="锁定密码库">
-          <Lock className="mr-1.5 h-4 w-4" />
-          锁定
+          <Lock className="h-4 w-4" />
+          <span className="ml-1.5 hidden sm:inline">锁定</span>
         </Button>
         <Button size="sm" variant="ghost" onClick={handleLogout} aria-label="退出登录">
-          <LogOut className="mr-1.5 h-4 w-4" />
-          退出
+          <LogOut className="h-4 w-4" />
+          <span className="ml-1.5 hidden sm:inline">退出</span>
         </Button>
         <ThemeToggle />
       </div>

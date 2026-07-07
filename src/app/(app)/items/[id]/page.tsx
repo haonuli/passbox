@@ -1,13 +1,15 @@
 /**
- * 条目详情页占位（T4.3 实现完整条目详情与解密）。
+ * 条目详情页 (T4.5)
+ *
+ * Server Component 壳，从路由参数提取 itemId 传给客户端组件。
  */
-export default function ItemDetailPage() {
-  return (
-    <div className="flex flex-1 items-center justify-center px-6 py-16">
-      <div className="flex flex-col items-center gap-4 text-center">
-        <h1 className="text-2xl font-semibold tracking-tight">条目详情</h1>
-        <p className="text-sm text-muted-foreground">条目详情页将在 T4.3 实现</p>
-      </div>
-    </div>
-  );
+import { ItemDetail } from './_components/item-detail';
+
+export default async function ItemDetailPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = await params;
+  return <ItemDetail itemId={id} />;
 }
