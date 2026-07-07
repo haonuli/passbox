@@ -29,6 +29,13 @@ const TITLE_AAD_SUFFIX = ':title';
 const DATA_AAD_PREFIX = 'item:';
 const DATA_AAD_SUFFIX = ':data';
 
+/** item_type_id → code 映射（与 migrate.ts 预置数据一致） */
+const ITEM_TYPE_CODE_MAP: Record<number, string> = {
+  1: 'login',
+  2: 'secure_note',
+  3: 'credit_card',
+};
+
 /** 保险库名称解密 AAD */
 const VAULT_NAME_AAD = 'passbox:vault-name:v1';
 
@@ -134,7 +141,7 @@ async function decryptItem(
     id: item.id,
     vaultId: item.vault_id,
     itemTypeId: item.item_type_id,
-    itemTypeCode: ['', 'login', 'secure_note', 'credit_card'][item.item_type_id] ?? 'login',
+    itemTypeCode: ITEM_TYPE_CODE_MAP[item.item_type_id] ?? 'login',
     title,
     data,
     isFavorite: item.is_favorite,

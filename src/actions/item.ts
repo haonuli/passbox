@@ -81,7 +81,8 @@ export async function createItem(input: CreateItemInput): Promise<ActionResult<I
     } finally {
       client.release();
     }
-  } catch {
+  } catch (err) {
+    console.error('[createItem] 创建失败:', err instanceof Error ? err.message : '未知错误');
     return { ok: false, error: '创建条目失败，请稍后重试' };
   }
 }

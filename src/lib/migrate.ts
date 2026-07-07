@@ -136,16 +136,23 @@ const DDL_SCRIPTS: string[] = [
    FOR EACH ROW EXECUTE FUNCTION update_updated_at();`,
 ];
 
-// 预置数据：条目类型（ON CONFLICT 保证幂等）
+// 预置数据：条目类型（显式 ID 确保 1/2/3，ON CONFLICT 保证幂等）
+// ⚠️ 使用显式 ID 而非 SERIAL 自增，因为前端代码（item-form.tsx / vault-store.ts）
+// 依赖固定的 ID 映射。SERIAL 自增在多次迁移/测试后可能产生非预期 ID（如 10/11/12）。
 const SEED_ITEM_TYPES_SQL = `
-  INSERT INTO item_types (code, name, icon, field_schema, sort_order) VALUES
-    ('login', '登录', 'key-round',
+  INSERT INTO item_types (id, code, name, icon, field_schema, sort_order) VALUES
+    (1, 'login', '登录', 'key-round',
      '{"fields":["title","url","username","password","totp_secret","notes"]}'::jsonb, 1),
-    ('secure_note', '安全笔记', 'note',
+    (2, 'secure_note', '安全笔记', 'note',
      '{"fields":["title","note_text"]}'::jsonb, 2),
-    ('credit_card', '信用卡', 'credit-card',
+    (3, 'credit_card', '信用卡', 'credit-card',
      '{"fields":["title","cardholder","card_number","expiry","cvv","notes"]}'::jsonb, 3)
-  ON CONFLICT (code) DO NOTHING;
+  ON CONFLICT (code) DO UPDATE SET
+    id = EXCLUDED.id,
+    name = EXCLUDED.name,
+    icon = EXCLUDED.icon,
+    field_schema = EXCLUDED.field_schema,
+    sort_order = EXCLUDED.sort_order;
 `;
 
 /**
