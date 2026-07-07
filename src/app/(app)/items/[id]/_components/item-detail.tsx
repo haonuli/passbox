@@ -1,10 +1,12 @@
 /**
- * 条目详情组件 (T4.5)
+ * 条目详情组件 (T4.5 / T5.4 / T5.6)
  *
  * 展示登录条目的完整信息：标题、URL、用户名、密码（默认隐藏）、备注。
  * 提供编辑、删除、收藏切换操作按钮。
+ * T5.4: TOTP 验证码实时展示
+ * T5.6: 复制用户名/密码、打开网站便捷操作
  *
- * @see TASK_BREAKDOWN T4.5 验收标准
+ * @see TASK_BREAKDOWN T4.5 / T5.4 / T5.6 验收标准
  */
 'use client';
 
@@ -22,6 +24,8 @@ import {
   KeyRound,
   FileText,
   Loader2,
+  Copy,
+  ExternalLink,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -35,7 +39,8 @@ import {
 } from '@/components/ui/dialog';
 import { useVaultStore } from '@/stores/vault-store';
 import { deleteItem, toggleFavorite } from '@/actions/item';
-import type { DecryptedItem } from '@/types/vault';
+import { useClipboard } from '@/hooks/use-clipboard';
+import { TotpDisplay } from '@/components/item/totp-display';
 
 interface ItemDetailProps {
   itemId: string;
@@ -87,6 +92,7 @@ export function ItemDetail({ itemId }: ItemDetailProps) {
   const updateFavorite = useVaultStore((s) => s.updateFavorite);
   const [deleting, setDeleting] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const { copy } = useClipboard();
 
   const item = items.find((i) => i.id === itemId);
 
@@ -117,7 +123,6 @@ export function ItemDetail({ itemId }: ItemDetailProps) {
     try {
       const result = await toggleFavorite(item.id, newValue);
       if (!result.ok) {
-        // 回滚
         updateFavorite(item.id, !newValue);
         toast.error(result.error);
       }
@@ -126,6 +131,29 @@ export function ItemDetail({ itemId }: ItemDetailProps) {
       toast.error('更新收藏状态失败');
     }
   }, [item, updateFavorite]);
+
+  const handleCopyUsername = useCallback(() => {
+    if (item?.data.username) {
+      copy(item.data.username, 0, '用户名');
+    }
+  }, [item, copy]);
+
+  const handleCopyPassword = useCallback(() => {
+    if (item?.data.password) {
+      copy(item.data.password, 30, '密码');
+    }
+  }, [item, copy]);
+
+  const handleOpenWebsite = useCallback(() => {
+    if (item?.data.url) {
+      let url = item.data.url;
+      // 确保 URL 有协议前缀
+      if (!url.startsWith('http://') && !url.startsWith('https://')) {
+        url = `https://${url}`;
+      }
+      window.open(url, '_blank', 'noopener,noreferrer');
+    }
+  }, [item]);
 
   // 条目不存在
   if (!item) {
@@ -189,16 +217,8 @@ export function ItemDetail({ itemId }: ItemDetailProps) {
       <div className="flex-1 overflow-auto">
         {item.itemTypeCode === 'login' && (
           <>
-            <DetailField
-              icon={Globe}
-              label="网址"
-              value={item.data.url}
-            />
-            <DetailField
-              icon={User}
-              label="用户名"
-              value={item.data.username}
-            />
+            <DetailField icon={Globe} label="网址" value={item.data.url} />
+            <DetailField icon={User} label="用户名" value={item.data.username} />
             <DetailField
               icon={KeyRound}
               label="密码"
@@ -209,11 +229,7 @@ export function ItemDetail({ itemId }: ItemDetailProps) {
         )}
 
         {item.itemTypeCode === 'secure_note' && (
-          <DetailField
-            icon={FileText}
-            label="笔记内容"
-            value={item.data.noteText}
-          />
+          <DetailField icon={FileText} label="笔记内容" value={item.data.noteText} />
         )}
 
         {item.itemTypeCode === 'credit_card' && (
@@ -235,8 +251,39 @@ export function ItemDetail({ itemId }: ItemDetailProps) {
           </>
         )}
 
+        {/* TOTP 验证码展示（T5.4） */}
+        {item.data.totpSecret && (
+          <div className="px-4 py-3">
+            <TotpDisplay base32Secret={item.data.totpSecret} />
+          </div>
+        )}
+
         {item.data.notes && (
           <DetailField icon={FileText} label="备注" value={item.data.notes} />
+        )}
+
+        {/* 便捷操作按钮（T5.6） */}
+        {item.itemTypeCode === 'login' && (
+          <div className="flex flex-wrap gap-2 px-4 py-3">
+            {item.data.username && (
+              <Button size="sm" variant="outline" onClick={handleCopyUsername}>
+                <Copy className="h-4 w-4" />
+                复制用户名
+              </Button>
+            )}
+            {item.data.password && (
+              <Button size="sm" variant="outline" onClick={handleCopyPassword}>
+                <Copy className="h-4 w-4" />
+                复制密码
+              </Button>
+            )}
+            {item.data.url && (
+              <Button size="sm" variant="outline" onClick={handleOpenWebsite}>
+                <ExternalLink className="h-4 w-4" />
+                打开网站
+              </Button>
+            )}
+          </div>
         )}
 
         {/* 元数据 */}
@@ -263,11 +310,7 @@ export function ItemDetail({ itemId }: ItemDetailProps) {
             >
               取消
             </Button>
-            <Button
-              variant="destructive"
-              onClick={handleDelete}
-              disabled={deleting}
-            >
+            <Button variant="destructive" onClick={handleDelete} disabled={deleting}>
               {deleting && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}
               删除
             </Button>

@@ -18,7 +18,7 @@ import { PasswordInput } from '@/components/password-input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { useRegister } from '@/hooks/use-register';
-import { StrengthIndicator } from './strength-indicator';
+import { StrengthIndicator } from '@/components/common/strength-indicator';
 import { EmergencyKit } from './emergency-kit';
 
 /** 注册表单校验 schema */

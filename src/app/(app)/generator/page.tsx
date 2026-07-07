@@ -1,12 +1,18 @@
 /**
- * 密码生成器占位（T5.1 实现密码生成器界面）。
+ * 密码生成器页面 (T5.1)
+ *
+ * Server Component 壳，渲染 GeneratorPanel 客户端组件。
  */
+import { GeneratorPanel } from './_components/generator-panel';
+
 export default function GeneratorPage() {
   return (
-    <div className="flex flex-1 items-center justify-center px-6 py-16">
-      <div className="flex flex-col items-center gap-4 text-center">
-        <h1 className="text-2xl font-semibold tracking-tight">密码生成器</h1>
-        <p className="text-sm text-muted-foreground">密码生成器将在 T5.1 实现</p>
+    <div className="flex h-full flex-col">
+      <div className="border-b border-border px-4 py-3">
+        <h1 className="text-base font-semibold">密码生成器</h1>
+      </div>
+      <div className="flex-1 overflow-auto">
+        <GeneratorPanel />
       </div>
     </div>
   );

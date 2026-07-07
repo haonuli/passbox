@@ -39,6 +39,7 @@ const itemFormSchema = z.object({
   url: z.string().max(500, '网址不能超过 500 字').optional().or(z.literal('')),
   username: z.string().max(200, '用户名不能超过 200 字').optional().or(z.literal('')),
   password: z.string().max(500, '密码不能超过 500 字').optional().or(z.literal('')),
+  totpSecret: z.string().max(200, 'TOTP 密钥不能超过 200 字').optional().or(z.literal('')),
   notes: z.string().max(5000, '备注不能超过 5000 字').optional().or(z.literal('')),
 });
 
@@ -72,6 +73,7 @@ export function ItemForm({ mode, itemId }: ItemFormProps) {
       url: '',
       username: '',
       password: '',
+      totpSecret: '',
       notes: '',
     },
   });
@@ -84,6 +86,7 @@ export function ItemForm({ mode, itemId }: ItemFormProps) {
         url: existingItem.data.url ?? '',
         username: existingItem.data.username ?? '',
         password: existingItem.data.password ?? '',
+        totpSecret: existingItem.data.totpSecret ?? '',
         notes: existingItem.data.notes ?? '',
       });
     }
@@ -120,6 +123,7 @@ export function ItemForm({ mode, itemId }: ItemFormProps) {
           url: values.url || undefined,
           username: values.username || undefined,
           password: values.password || undefined,
+          totpSecret: values.totpSecret || undefined,
           notes: values.notes || undefined,
         };
 
@@ -272,6 +276,19 @@ export function ItemForm({ mode, itemId }: ItemFormProps) {
           />
           {errors.password && (
             <p className="text-xs text-destructive">{errors.password.message}</p>
+          )}
+        </div>
+
+        <div className="space-y-1.5">
+          <Label htmlFor="totpSecret">一次性密码（TOTP）</Label>
+          <Input
+            id="totpSecret"
+            placeholder="粘贴 base32 密钥（可选）"
+            autoComplete="off"
+            {...register('totpSecret')}
+          />
+          {errors.totpSecret && (
+            <p className="text-xs text-destructive">{errors.totpSecret.message}</p>
           )}
         </div>
 

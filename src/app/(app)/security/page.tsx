@@ -1,13 +1,13 @@
 /**
- * 安全中心占位（T5.5 实现安全仪表盘与泄露检测）。
+ * 安全中心页面 (T5.5)
+ *
+ * 当前阶段实现重复密码检测展示。
+ * 完整安全仪表盘（弱密码/泄露检测/评分）在 T6.7 实现。
+ *
+ * Server Component 壳，渲染 SecurityView 客户端组件。
  */
+import { SecurityView } from './_components/security-view';
+
 export default function SecurityPage() {
-  return (
-    <div className="flex flex-1 items-center justify-center px-6 py-16">
-      <div className="flex flex-col items-center gap-4 text-center">
-        <h1 className="text-2xl font-semibold tracking-tight">安全中心</h1>
-        <p className="text-sm text-muted-foreground">安全中心将在 T5.5 实现</p>
-      </div>
-    </div>
-  );
+  return <SecurityView />;
 }
