@@ -51,3 +51,18 @@ export function stringToBytes(str: string): Uint8Array {
 export function bytesToString(bytes: Uint8Array): string {
   return new TextDecoder().decode(bytes);
 }
+
+/**
+ * 安全清除 Uint8Array 内存（best-effort）。
+ *
+ * JS GC 不保证即时回收，fill(0) 至少在调用瞬间覆写缓冲区。
+ * 用于清除 masterKey / recoveryCodeRaw 等敏感密钥材料，
+ * 防止错误路径下密钥遗留内存（M-14）。
+ *
+ * 传入 null 时为空操作（便于调用方无需判空）。
+ */
+export function zeroFill(arr: Uint8Array | null): void {
+  if (arr !== null) {
+    arr.fill(0);
+  }
+}

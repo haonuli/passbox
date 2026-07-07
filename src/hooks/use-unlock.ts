@@ -22,7 +22,7 @@ import { useState, useCallback } from 'react';
 import { deriveMasterKeyViaWorker } from '@/lib/crypto/kdf-worker-client';
 import { buildKdfConfig } from '@/lib/crypto/kdf';
 import { decryptSymmetricKey } from '@/lib/crypto/keys';
-import { fromBase64 } from '@/lib/crypto/encoding';
+import { fromBase64, zeroFill } from '@/lib/crypto/encoding';
 import { useAuthStore } from '@/stores/auth-store';
 import type { SessionResponse } from '@/types/api';
 
@@ -53,6 +53,9 @@ export function useUnlock(): UseUnlockReturn {
     setError(null);
     setSessionExpired(false);
 
+    // M-14：敏感密钥材料声明在 try 外，catch 中零填充防止内存遗留
+    let masterKey: Uint8Array | null = null;
+
     try {
       // 1. 获取会话加密参数
       const res = await fetch('/api/auth/session', { method: 'GET' });
@@ -73,7 +76,7 @@ export function useUnlock(): UseUnlockReturn {
       setStatus('deriving');
       const kdfSalt = fromBase64(data.kdfSalt);
       const kdfConfig = buildKdfConfig(kdfSalt, data.kdfParams);
-      const masterKey = await deriveMasterKeyViaWorker(masterPassword, kdfConfig);
+      masterKey = await deriveMasterKeyViaWorker(masterPassword, kdfConfig);
 
       // 3. 解密 Symmetric Key（主密码错误时 GCM 认证失败抛异常）
       let symmetricKey: CryptoKey;
@@ -84,13 +87,18 @@ export function useUnlock(): UseUnlockReturn {
       }
 
       // 4. 更新 auth-store：authenticated → unlocked
+      // masterKey 所有权转移给 store，store 负责 lock/logout 时零填充
       useAuthStore
         .getState()
         .setAuthenticated(data.user, data.encryptedKey, data.kdfSalt, data.kdfParams);
       useAuthStore.getState().unlock(masterKey, symmetricKey);
+      masterKey = null; // 所有权已转移，避免 catch 误清
 
       setStatus('success');
     } catch (e) {
+      // M-14：错误路径下零填充敏感密钥材料，防止内存遗留
+      zeroFill(masterKey);
+      masterKey = null;
       setError(e instanceof Error ? e.message : '解锁失败，请稍后重试');
       setStatus('error');
     }

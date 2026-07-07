@@ -26,7 +26,7 @@ import { generateKdfSalt, buildKdfConfig, DEFAULT_KDF_PARAMS } from '@/lib/crypt
 import { deriveAuthHash, deriveRecoveryKey } from '@/lib/crypto/hkdf';
 import { generateSymmetricKey, encryptSymmetricKey, encryptSymmetricKeyWithRecovery } from '@/lib/crypto/keys';
 import { encrypt } from '@/lib/crypto/aes';
-import { toBase64 } from '@/lib/crypto/encoding';
+import { toBase64, zeroFill } from '@/lib/crypto/encoding';
 import { generateRecoveryCode } from '@/lib/recovery-code';
 import { useAuthStore } from '@/stores/auth-store';
 import type { RegisterRequest, RegisterResponse } from '@/types/api';
@@ -60,13 +60,18 @@ export function useRegister(): UseRegisterReturn {
     setStatus('encrypting');
     setError(null);
 
+    // M-14：敏感密钥材料声明在 try 外，catch 中零填充防止内存遗留
+    let masterKey: Uint8Array | null = null;
+    let recoveryCodeRaw: Uint8Array | null = null;
+    let recoveryKey: Uint8Array | null = null;
+
     try {
       // 1. 生成 KDF salt
       const kdfSalt = generateKdfSalt();
       const kdfConfig = buildKdfConfig(kdfSalt, DEFAULT_KDF_PARAMS);
 
       // 2. Argon2id 派生 Master Key（Web Worker）
-      const masterKey = await deriveMasterKeyViaWorker(masterPassword, kdfConfig);
+      masterKey = await deriveMasterKeyViaWorker(masterPassword, kdfConfig);
 
       // 3. 生成 Symmetric Key
       const symmetricKey = await generateSymmetricKey();
@@ -79,10 +84,11 @@ export function useRegister(): UseRegisterReturn {
       const authHash = toBase64(authHashBytes);
 
       // 6. 生成恢复码
-      const { raw: recoveryCodeRaw, formatted: recoveryCodeFormatted } = generateRecoveryCode();
+      const { raw: recoveryCodeRawInner, formatted: recoveryCodeFormatted } = generateRecoveryCode();
+      recoveryCodeRaw = recoveryCodeRawInner;
 
       // 7. HKDF 从恢复码派生 Recovery Key
-      const recoveryKey = await deriveRecoveryKey(recoveryCodeRaw, email);
+      recoveryKey = await deriveRecoveryKey(recoveryCodeRaw, email);
 
       // 8. 用 Recovery Key 加密 Symmetric Key 副本
       const recoveryEncryptedKey = await encryptSymmetricKeyWithRecovery(recoveryKey, symmetricKey);
@@ -118,16 +124,25 @@ export function useRegister(): UseRegisterReturn {
       }
 
       // 12. 更新 auth-store：authenticated → unlocked
+      // masterKey 所有权转移给 store，store 负责 lock/logout 时零填充
       const kdfSaltBase64 = toBase64(kdfSalt);
       useAuthStore
         .getState()
         .setAuthenticated(data.user, encryptedKey, kdfSaltBase64, DEFAULT_KDF_PARAMS);
       useAuthStore.getState().unlock(masterKey, symmetricKey);
+      masterKey = null; // 所有权已转移，避免 catch 误清
 
       setRecoveryCode(recoveryCodeFormatted);
       setUser(data.user);
       setStatus('success');
     } catch (e) {
+      // M-14：错误路径下零填充敏感密钥材料，防止内存遗留
+      zeroFill(masterKey);
+      zeroFill(recoveryCodeRaw);
+      zeroFill(recoveryKey);
+      masterKey = null;
+      recoveryCodeRaw = null;
+      recoveryKey = null;
       setError(e instanceof Error ? e.message : '注册失败，请稍后重试');
       setStatus('error');
     }

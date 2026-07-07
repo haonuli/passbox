@@ -24,7 +24,7 @@ import { deriveMasterKeyViaWorker } from '@/lib/crypto/kdf-worker-client';
 import { buildKdfConfig } from '@/lib/crypto/kdf';
 import { deriveAuthHash } from '@/lib/crypto/hkdf';
 import { decryptSymmetricKey } from '@/lib/crypto/keys';
-import { fromBase64, toBase64 } from '@/lib/crypto/encoding';
+import { fromBase64, toBase64, zeroFill } from '@/lib/crypto/encoding';
 import { useAuthStore } from '@/stores/auth-store';
 import type {
   LoginRequest,
@@ -78,6 +78,9 @@ export function useLogin(): UseLoginReturn {
     setError(null);
     setLockedUntil(null);
 
+    // M-14：敏感密钥材料声明在 try 外，catch 中零填充防止内存遗留
+    let masterKey: Uint8Array | null = null;
+
     try {
       // 1. 预登录：获取 KDF 参数（防枚举，未注册邮箱也返回随机参数）
       const preloginRes = await fetch('/api/auth/prelogin', {
@@ -96,7 +99,7 @@ export function useLogin(): UseLoginReturn {
       setStatus('deriving');
       const kdfSalt = fromBase64(preloginData.kdfSalt);
       const kdfConfig = buildKdfConfig(kdfSalt, preloginData.kdfParams);
-      const masterKey = await deriveMasterKeyViaWorker(masterPassword, kdfConfig);
+      masterKey = await deriveMasterKeyViaWorker(masterPassword, kdfConfig);
 
       // 3. HKDF 派生 Auth Hash
       const authHashBytes = await deriveAuthHash(masterKey, email);
@@ -127,13 +130,18 @@ export function useLogin(): UseLoginReturn {
       const symmetricKey = await decryptSymmetricKey(masterKey, data.encryptedKey);
 
       // 6. 更新 auth-store：authenticated → unlocked
+      // masterKey 所有权转移给 store，store 负责 lock/logout 时零填充
       useAuthStore
         .getState()
         .setAuthenticated(data.user, data.encryptedKey, data.kdfSalt, data.kdfParams);
       useAuthStore.getState().unlock(masterKey, symmetricKey);
+      masterKey = null; // 所有权已转移，避免 catch 误清
 
       setStatus('success');
     } catch (e) {
+      // M-14：错误路径下零填充敏感密钥材料，防止内存遗留
+      zeroFill(masterKey);
+      masterKey = null;
       // 网络错误 / Worker 错误 / API 错误统一处理
       setError(e instanceof Error ? e.message : '登录失败，请稍后重试');
       setStatus('error');

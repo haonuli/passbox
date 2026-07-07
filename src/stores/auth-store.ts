@@ -27,6 +27,7 @@
  */
 import { create } from 'zustand';
 import type { EncryptedData, KdfParams } from '@/types/crypto';
+import { zeroFill } from '@/lib/crypto/encoding';
 
 // ============================================================
 // 类型定义
@@ -91,21 +92,6 @@ export interface AuthStore {
    * 登出：清除全部状态（含密钥零填充），status → unauthenticated。
    */
   logout: () => void;
-}
-
-// ============================================================
-// 辅助函数
-// ============================================================
-
-/**
- * 安全清除 Uint8Array 内存（best-effort）。
- * JS GC 不保证即时回收，fill(0) 至少在调用瞬间覆写缓冲区。
- * CryptoKey 无法手动清除（由 GC 管理），但置 null 可断开引用。
- */
-function zeroFill(arr: Uint8Array | null): void {
-  if (arr !== null) {
-    arr.fill(0);
-  }
 }
 
 // ============================================================

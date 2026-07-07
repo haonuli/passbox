@@ -46,7 +46,7 @@ import {
   decryptSymmetricKeyWithRecovery,
   encryptSymmetricKey,
 } from '@/lib/crypto/keys';
-import { toBase64 } from '@/lib/crypto/encoding';
+import { toBase64, zeroFill } from '@/lib/crypto/encoding';
 import { useAuthStore } from '@/stores/auth-store';
 import type {
   RecoverVerifyRequest,
@@ -93,14 +93,19 @@ export function useRecover(): UseRecoverReturn {
       setStatus('verifying');
       setError(null);
 
+      // M-14：敏感密钥材料声明在 try 外，catch 中零填充防止内存遗留
+      let recoveryCodeRaw: Uint8Array | null = null;
+      let recoveryKey: Uint8Array | null = null;
+      let newMasterKey: Uint8Array | null = null;
+
       try {
         // ---- 阶段一：验证恢复码 + 解密 Symmetric Key ----
 
         // 1. 解析恢复码为 raw 字节
-        const recoveryCodeRaw = parseRecoveryCode(recoveryCode);
+        recoveryCodeRaw = parseRecoveryCode(recoveryCode);
 
         // 2. HKDF 派生 Recovery Key
-        const recoveryKey = await deriveRecoveryKey(recoveryCodeRaw, email);
+        recoveryKey = await deriveRecoveryKey(recoveryCodeRaw, email);
 
         // 3. 调用 verify API（服务端 bcrypt 验证恢复码）
         const verifyBody: RecoverVerifyRequest = { email, recoveryCode };
@@ -140,7 +145,7 @@ export function useRecover(): UseRecoverReturn {
         const kdfConfig = buildKdfConfig(newKdfSalt, DEFAULT_KDF_PARAMS);
 
         // 6. Argon2id 派生新 Master Key（Web Worker，不阻塞 UI）
-        const newMasterKey = await deriveMasterKeyViaWorker(
+        newMasterKey = await deriveMasterKeyViaWorker(
           newMasterPassword,
           kdfConfig,
         );
@@ -181,6 +186,7 @@ export function useRecover(): UseRecoverReturn {
         const recoverData: RecoverResponse = await recoverRes.json();
 
         // 10. 更新 auth-store：authenticated → unlocked
+        // newMasterKey 所有权转移给 store，store 负责 lock/logout 时零填充
         useAuthStore
           .getState()
           .setAuthenticated(
@@ -190,9 +196,17 @@ export function useRecover(): UseRecoverReturn {
             DEFAULT_KDF_PARAMS,
           );
         useAuthStore.getState().unlock(newMasterKey, symmetricKey);
+        newMasterKey = null; // 所有权已转移，避免 catch 误清
 
         setStatus('success');
       } catch (e) {
+        // M-14：错误路径下零填充敏感密钥材料，防止内存遗留
+        zeroFill(recoveryCodeRaw);
+        zeroFill(recoveryKey);
+        zeroFill(newMasterKey);
+        recoveryCodeRaw = null;
+        recoveryKey = null;
+        newMasterKey = null;
         setError(e instanceof Error ? e.message : '恢复失败，请稍后重试');
         setStatus('error');
       }
