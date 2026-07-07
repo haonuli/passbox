@@ -5,9 +5,13 @@
  * 综合长度、字符多样性、常见弱密码字典、模式检测。
  * 输出评分（0-4）和标签（弱/中/强）+ 改进建议。
  *
+ * ⚠️ zxcvbn-ts 内部会尝试 import 'node:fs'（用于从文件系统加载字典），
+ * 在浏览器/Edge Runtime 中不可用。即使使用 next/dynamic + ssr:false，
+ * Turbopack 仍会在编译阶段评估完整模块图导致崩溃。
+ * 因此改为懒加载导入，仅在运行时（客户端）动态 import zxcvbn-ts。
+ *
  * @see TASK_BREAKDOWN T5.2 验收标准
  */
-import { zxcvbn } from 'zxcvbn-ts';
 
 /** 强度标签 */
 export type StrengthLabel = 'weak' | 'fair' | 'strong';
@@ -34,15 +38,33 @@ function scoreToLabel(score: number): StrengthLabel {
   return 'strong';
 }
 
+/** zxcvbn-ts 懒加载缓存（仅客户端运行时使用） */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let _zxcvbn: ((password: string) => any) | null = null;
+
+/**
+ * 懒加载 zxcvbn-ts，避免顶层 import 触发 node:fs 评估。
+ * 首次调用时动态 import，后续调用使用缓存。
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function getZxcvbn(): Promise<(password: string) => any> {
+  if (!_zxcvbn) {
+    const mod = await import('zxcvbn-ts');
+    _zxcvbn = mod.zxcvbn;
+  }
+  return _zxcvbn;
+}
+
 /**
  * 评估密码强度。
  *
  * 在浏览器端本地完成，不上传密码明文。
+ * 由于 zxcvbn-ts 采用懒加载，此函数为异步。
  *
  * @param password 待评估的密码
  * @returns 强度评估结果
  */
-export function assessPassword(password: string): PasswordStrengthResult {
+export async function assessPassword(password: string): Promise<PasswordStrengthResult> {
   if (password.length === 0) {
     return {
       score: 0,
@@ -52,6 +74,7 @@ export function assessPassword(password: string): PasswordStrengthResult {
     };
   }
 
+  const zxcvbn = await getZxcvbn();
   const result = zxcvbn(password);
 
   // 将英文建议翻译为中文

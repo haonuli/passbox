@@ -1,0 +1,892 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>vibe coding实战记录：密码管理系统-黑客偷走数据库也看不到你密码（一）</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg: #08080c;
+    --surface: #0f0f17;
+    --surface-2: #181826;
+    --border: #27273a;
+    --text: #fafafa;
+    --text-muted: #a1a1aa;
+    --text-dim: #71717a;
+    --primary: #8b5cf6;
+    --primary-glow: rgba(139, 92, 246, 0.35);
+    --secondary: #22c55e;
+    --accent: #3b82f6;
+    --warning: #f59e0b;
+    --mono: 'SF Mono', 'JetBrains Mono', 'Fira Code', Consolas, monospace;
+  }
+
+  html, body {
+    height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+    overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  body {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    background:
+      radial-gradient(ellipse at 15% 20%, rgba(139, 92, 246, 0.12) 0%, transparent 45%),
+      radial-gradient(ellipse at 85% 80%, rgba(59, 130, 246, 0.08) 0%, transparent 45%),
+      var(--bg);
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(139, 92, 246, 0.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(139, 92, 246, 0.04) 1px, transparent 1px);
+    background-size: 50px 50px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .ppt-container {
+    width: min(95vw, calc((100vh - 100px) * 16 / 9));
+    aspect-ratio: 16 / 9;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    overflow: hidden;
+    position: relative;
+    box-shadow:
+      0 0 0 1px rgba(139, 92, 246, 0.1),
+      0 30px 80px rgba(0, 0, 0, 0.6),
+      0 0 120px rgba(139, 92, 246, 0.18);
+    z-index: 1;
+  }
+
+  .slide {
+    position: absolute;
+    inset: 0;
+    padding: 5.5% 6.5%;
+    display: flex;
+    flex-direction: column;
+    opacity: 0;
+    transform: translateX(60px);
+    transition: opacity 0.6s cubic-bezier(0.4, 0, 0.2, 1), transform 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+    pointer-events: none;
+  }
+
+  .slide.active {
+    opacity: 1;
+    transform: translateX(0);
+    pointer-events: auto;
+  }
+
+  .slide.prev {
+    transform: translateX(-60px);
+  }
+
+  /* === Slide 1: 封面 === */
+  .slide-cover {
+    justify-content: center;
+    background:
+      radial-gradient(circle at 70% 50%, rgba(139, 92, 246, 0.15) 0%, transparent 50%),
+      var(--surface);
+  }
+
+  .cover-episode {
+    position: absolute;
+    right: 6.5%;
+    bottom: 5.5%;
+    font-size: clamp(80px, 12vw, 180px);
+    font-weight: 900;
+    color: rgba(139, 92, 246, 0.08);
+    line-height: 0.8;
+    font-family: var(--mono);
+    pointer-events: none;
+  }
+
+  .cover-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 16px;
+    background: rgba(139, 92, 246, 0.1);
+    border: 1px solid rgba(139, 92, 246, 0.3);
+    border-radius: 100px;
+    font-family: var(--mono);
+    font-size: clamp(11px, 1.2vw, 14px);
+    color: var(--primary);
+    width: fit-content;
+    margin-bottom: 5%;
+    letter-spacing: 0.5px;
+  }
+
+  .cover-tag::before {
+    content: '';
+    width: 8px;
+    height: 8px;
+    background: var(--primary);
+    border-radius: 50%;
+    box-shadow: 0 0 12px var(--primary);
+    animation: pulse 2s infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.6; transform: scale(0.8); }
+  }
+
+  .cover-title {
+    font-size: clamp(48px, 7vw, 96px);
+    font-weight: 900;
+    line-height: 1;
+    letter-spacing: -0.03em;
+    margin-bottom: 3%;
+    background: linear-gradient(135deg, #fff 0%, #c4b5fd 50%, #8b5cf6 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .cover-subtitle {
+    font-size: clamp(20px, 2.5vw, 32px);
+    color: var(--text-muted);
+    font-weight: 400;
+    margin-bottom: 6%;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .cover-subtitle::before {
+    content: '"';
+    font-size: 1.5em;
+    color: var(--primary);
+    font-family: Georgia, serif;
+  }
+
+  .cover-meta {
+    display: flex;
+    gap: 24px;
+    margin-top: auto;
+    padding-top: 4%;
+    border-top: 1px solid var(--border);
+  }
+
+  .meta-item { flex: 1; }
+
+  .meta-label {
+    font-family: var(--mono);
+    font-size: clamp(9px, 1vw, 11px);
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 6px;
+  }
+
+  .meta-value {
+    font-size: clamp(13px, 1.4vw, 16px);
+    color: var(--text);
+    font-weight: 500;
+  }
+
+  .meta-value.success { color: var(--secondary); }
+
+  /* === 通用 slide 标题 === */
+  .slide-header {
+    display: flex;
+    align-items: baseline;
+    gap: 16px;
+    margin-bottom: 5%;
+    padding-bottom: 3%;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .slide-num {
+    font-family: var(--mono);
+    font-size: clamp(11px, 1.2vw, 14px);
+    color: var(--primary);
+    letter-spacing: 1px;
+  }
+
+  .slide-title {
+    font-size: clamp(28px, 4vw, 52px);
+    font-weight: 800;
+    letter-spacing: -0.02em;
+  }
+
+  .slide-subtitle {
+    font-size: clamp(13px, 1.4vw, 16px);
+    color: var(--text-muted);
+    margin-left: auto;
+  }
+
+  /* === 内容块 === */
+  .content-block {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    flex: 1;
+    justify-content: center;
+  }
+
+  .text-line {
+    font-size: clamp(15px, 1.7vw, 22px);
+    line-height: 1.65;
+    color: var(--text);
+    padding-left: 22px;
+    border-left: 2px solid var(--border);
+  }
+
+  .text-line.highlight {
+    border-left-color: var(--primary);
+    background: linear-gradient(90deg, rgba(139, 92, 246, 0.08) 0%, transparent 100%);
+    padding: 14px 22px;
+    border-radius: 0 8px 8px 0;
+    font-weight: 500;
+  }
+
+  .text-line.highlight strong { color: var(--primary); }
+
+  .text-line .em {
+    color: var(--primary);
+    font-weight: 600;
+  }
+
+  .text-line .success { color: var(--secondary); font-weight: 600; }
+
+  /* === 进度卡片 === */
+  .progress-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px;
+    flex: 1;
+    align-content: center;
+  }
+
+  .progress-card {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 22px 24px;
+    display: flex;
+    gap: 16px;
+    align-items: flex-start;
+    transition: all 0.3s;
+  }
+
+  .progress-card:hover {
+    border-color: rgba(34, 197, 94, 0.4);
+    transform: translateY(-2px);
+  }
+
+  .progress-icon {
+    width: 36px;
+    height: 36px;
+    background: rgba(34, 197, 94, 0.15);
+    border: 1px solid rgba(34, 197, 94, 0.3);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--secondary);
+    font-size: 18px;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+
+  .progress-text { flex: 1; }
+
+  .progress-title {
+    font-size: clamp(14px, 1.5vw, 17px);
+    font-weight: 600;
+    margin-bottom: 6px;
+    color: var(--text);
+  }
+
+  .progress-desc {
+    font-size: clamp(11px, 1.2vw, 13px);
+    color: var(--text-muted);
+    font-family: var(--mono);
+    line-height: 1.6;
+  }
+
+  /* === 感受 + 下期 === */
+  .feeling-block {
+    background: linear-gradient(135deg, rgba(139, 92, 246, 0.1) 0%, rgba(59, 130, 246, 0.05) 100%);
+    border: 1px solid rgba(139, 92, 246, 0.25);
+    border-radius: 14px;
+    padding: 24px 28px;
+    margin-bottom: 18px;
+  }
+
+  .feeling-label {
+    font-family: var(--mono);
+    font-size: clamp(10px, 1.1vw, 12px);
+    color: var(--primary);
+    letter-spacing: 1.5px;
+    margin-bottom: 10px;
+    text-transform: uppercase;
+  }
+
+  .feeling-text {
+    font-size: clamp(16px, 1.9vw, 23px);
+    line-height: 1.6;
+    font-weight: 500;
+  }
+
+  .feeling-text .accent {
+    color: var(--primary);
+    font-weight: 700;
+  }
+
+  .next-preview {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 8px;
+    padding: 18px 22px;
+    margin-bottom: 18px;
+  }
+
+  .next-label {
+    font-family: var(--mono);
+    font-size: clamp(10px, 1.1vw, 12px);
+    color: var(--accent);
+    letter-spacing: 1.5px;
+    margin-bottom: 8px;
+    text-transform: uppercase;
+  }
+
+  .next-title {
+    font-size: clamp(14px, 1.5vw, 18px);
+    color: var(--text);
+    font-weight: 600;
+    margin-bottom: 6px;
+  }
+
+  .next-desc {
+    font-size: clamp(11px, 1.2vw, 13px);
+    color: var(--text-muted);
+    line-height: 1.5;
+  }
+
+  /* === 谢谢页 === */
+  .slide-thanks {
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    background:
+      radial-gradient(circle at center, rgba(139, 92, 246, 0.15) 0%, transparent 60%),
+      var(--surface);
+  }
+
+  .thanks-title {
+    font-size: clamp(64px, 10vw, 140px);
+    font-weight: 900;
+    letter-spacing: -0.04em;
+    background: linear-gradient(135deg, #fff 0%, #c4b5fd 50%, #8b5cf6 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-bottom: 20px;
+  }
+
+  .thanks-subtitle {
+    font-size: clamp(18px, 2.2vw, 28px);
+    color: var(--text-muted);
+    margin-bottom: 36px;
+  }
+
+  .thanks-meta {
+    font-family: var(--mono);
+    font-size: clamp(11px, 1.2vw, 14px);
+    color: var(--text-dim);
+    letter-spacing: 1px;
+  }
+
+  /* === 控件 === */
+  .controls {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    background: rgba(15, 15, 23, 0.85);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid var(--border);
+    border-radius: 100px;
+    padding: 8px 12px;
+    z-index: 10;
+  }
+
+  .ctrl-btn {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    border: none;
+    background: var(--surface-2);
+    color: var(--text);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    transition: all 0.2s;
+  }
+
+  .ctrl-btn:hover:not(:disabled) {
+    background: var(--primary);
+    transform: scale(1.1);
+  }
+
+  .ctrl-btn:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+  }
+
+  .page-indicator {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--text-muted);
+    min-width: 60px;
+    text-align: center;
+  }
+
+  .page-indicator .current {
+    color: var(--primary);
+    font-weight: 600;
+  }
+
+  .progress-bar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 3px;
+    background: linear-gradient(90deg, var(--primary), var(--accent));
+    width: 0%;
+    transition: width 0.4s ease;
+    z-index: 100;
+    box-shadow: 0 0 10px var(--primary-glow);
+  }
+
+  .hint {
+    position: fixed;
+    top: 24px;
+    right: 24px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-dim);
+    letter-spacing: 0.5px;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .hint kbd {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 2px 8px;
+    color: var(--text);
+    font-family: var(--mono);
+  }
+
+  .ctrl-divider {
+    width: 1px;
+    height: 20px;
+    background: var(--border);
+  }
+
+  .ctrl-btn-export {
+    width: 36px;
+    height: 36px;
+    font-size: 15px;
+  }
+
+  .ctrl-btn-export:hover:not(:disabled) {
+    background: var(--accent);
+  }
+
+  .ctrl-btn-export.loading {
+    background: var(--accent);
+    animation: spin 0.8s linear infinite;
+    pointer-events: none;
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+
+  .export-toast {
+    position: fixed;
+    bottom: 80px;
+    left: 50%;
+    transform: translateX(-50%) translateY(20px);
+    background: rgba(15, 15, 23, 0.95);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid var(--border);
+    border-radius: 100px;
+    padding: 10px 20px;
+    font-size: 13px;
+    color: var(--text);
+    z-index: 100;
+    opacity: 0;
+    pointer-events: none;
+    transition: all 0.3s;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .export-toast.show {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+
+  .export-toast .toast-icon {
+    width: 16px;
+    height: 16px;
+    border: 2px solid var(--primary);
+    border-top-color: transparent;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+
+  .export-toast.success .toast-icon {
+    border: none;
+    color: var(--secondary);
+    animation: none;
+  }
+</style>
+</head>
+<body>
+  <div class="progress-bar" id="progressBar"></div>
+
+  <div class="hint">
+    <kbd>←</kbd> <kbd>→</kbd> 翻页
+  </div>
+
+  <div class="ppt-container">
+    <!-- Slide 1: 封面 -->
+    <div class="slide slide-cover active">
+      <div class="cover-episode">01</div>
+      <div class="cover-tag">VLOG · vibe coding 实战记录</div>
+      <h1 class="cover-title">密码管理系统</h1>
+      <p class="cover-subtitle">黑客偷走数据库也看不到你密码</p>
+      <div class="cover-meta">
+        <div class="meta-item">
+          <div class="meta-label">Episode</div>
+          <div class="meta-value">第（一）集</div>
+        </div>
+        <div class="meta-item">
+          <div class="meta-label">Progress</div>
+          <div class="meta-value success">M0 + M1 + M2 已完成</div>
+        </div>
+        <div class="meta-item">
+          <div class="meta-label">Tests</div>
+          <div class="meta-value success">258 / 258 通过</div>
+        </div>
+        <div class="meta-item">
+          <div class="meta-label">Coverage</div>
+          <div class="meta-value success">加密核心 100%</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Slide 2: 开场白 上 -->
+    <div class="slide">
+      <div class="slide-header">
+        <span class="slide-num">02 / 06</span>
+        <h2 class="slide-title">开场白</h2>
+        <span class="slide-subtitle">Part 1 · 关于这个连载</span>
+      </div>
+      <div class="content-block">
+        <p class="text-line">哈喽大家好，我是 <span class="em">[你的名字/昵称]</span> 👋</p>
+        <p class="text-line">最近我迷上了 <span class="em">vibe coding</span> ——你描述需求、AI 帮你写代码、你负责设计和验收的开发方式。用下来感觉效率起飞的同时又有点不真实。</p>
+        <p class="text-line">所以想开个连载，把我用 vibe coding 做项目的真实过程记录下来，当个个人开发 vlog 吧 📹</p>
+        <p class="text-line highlight">如果顺便能帮到也在折腾的你，那就更好了。</p>
+      </div>
+    </div>
+
+    <!-- Slide 3: 开场白 下 -->
+    <div class="slide">
+      <div class="slide-header">
+        <span class="slide-num">03 / 06</span>
+        <h2 class="slide-title">本期看点</h2>
+        <span class="slide-subtitle">Part 2 · 项目介绍</span>
+      </div>
+      <div class="content-block">
+        <p class="text-line">第一个项目我选了个有点硬核的 ——<span class="em">密码管理系统</span> 🔐</p>
+        <p class="text-line">对标 1Password，但比它更狠的是：</p>
+        <p class="text-line highlight">哪怕黑客偷走数据库，<strong>也看不到你密码</strong></p>
+        <p class="text-line">这期我把我从立项到现在做的所有东西都过一遍：需求文档 → 技术方案 → 任务拆分 → 加密核心 → 注册登录 → 自动锁定 → 恢复码找回</p>
+        <p class="text-line">目前 <span class="success">258 个测试全绿</span>，代码已经能跑了</p>
+        <p class="text-line">纯粹是个人实战记录，不是教学哈 🙌 我们开始吧</p>
+      </div>
+    </div>
+
+    <!-- Slide 4: 结束语 上 - 进度梳理 -->
+    <div class="slide">
+      <div class="slide-header">
+        <span class="slide-num">04 / 06</span>
+        <h2 class="slide-title">本期进度</h2>
+        <span class="slide-subtitle">Part 3 · 成果梳理</span>
+      </div>
+      <div class="progress-grid">
+        <div class="progress-card">
+          <div class="progress-icon">✓</div>
+          <div class="progress-text">
+            <div class="progress-title">需求文档 + 技术方案</div>
+            <div class="progress-desc">PRD 18 个用户故事<br>8 条架构决策</div>
+          </div>
+        </div>
+        <div class="progress-card">
+          <div class="progress-icon">✓</div>
+          <div class="progress-text">
+            <div class="progress-title">零知识加密核心</div>
+            <div class="progress-desc">Argon2id + HKDF<br>AES-256-GCM</div>
+          </div>
+        </div>
+        <div class="progress-card">
+          <div class="progress-icon">✓</div>
+          <div class="progress-text">
+            <div class="progress-title">完整认证流程</div>
+            <div class="progress-desc">注册 / 登录 / 解锁<br>恢复码找回</div>
+          </div>
+        </div>
+        <div class="progress-card">
+          <div class="progress-icon">✓</div>
+          <div class="progress-text">
+            <div class="progress-title">测试全绿</div>
+            <div class="progress-desc">258 tests passed<br>核心加密 100% 覆盖</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Slide 5: 结束语 下 - 感受 + 下期 -->
+    <div class="slide">
+      <div class="slide-header">
+        <span class="slide-num">05 / 06</span>
+        <h2 class="slide-title">感受 & 下期</h2>
+        <span class="slide-subtitle">Part 4 · 总结 & 预告</span>
+      </div>
+      <div class="content-block" style="gap: 16px; justify-content: flex-start; padding-top: 2%;">
+        <div class="feeling-block">
+          <div class="feeling-label">★ 最大感受</div>
+          <p class="feeling-text">vibe coding 让我把注意力从 <span class="accent">"怎么写代码"</span> 转移到了 <span class="accent">"怎么设计一个产品"</span>，这种角色转换还挺爽的。</p>
+        </div>
+        <div class="next-preview">
+          <div class="next-label">▶ 下期预告</div>
+          <div class="next-title">密码条目 CRUD · 让系统真正能装下密码</div>
+          <div class="next-desc">暂定标题：vibe coding实战记录：密码管理系统-一个保险箱装下你所有的密码（二）</div>
+        </div>
+        <p class="text-line" style="border-left-color: var(--accent);">如果你也在做类似的项目，欢迎评论区交流，大家一起折腾 💬</p>
+        <p class="text-line">我们下期见 👋</p>
+      </div>
+    </div>
+
+    <!-- Slide 6: 谢谢 -->
+    <div class="slide slide-thanks">
+      <h1 class="thanks-title">Thanks</h1>
+      <p class="thanks-subtitle">感谢看到这里的你</p>
+      <p class="thanks-meta">vibe coding 实战记录 · 密码管理系统 · 第（一）集</p>
+      <p class="thanks-meta" style="margin-top: 12px; color: var(--primary);">黑客偷走数据库也看不到你密码</p>
+    </div>
+  </div>
+
+  <div class="controls">
+    <button class="ctrl-btn" id="prevBtn" disabled>←</button>
+    <span class="page-indicator"><span class="current" id="currentPage">1</span> / 6</span>
+    <button class="ctrl-btn" id="nextBtn">→</button>
+    <div class="ctrl-divider"></div>
+    <button class="ctrl-btn ctrl-btn-export" id="exportBtn" title="导出当前页为图片">📷</button>
+    <button class="ctrl-btn ctrl-btn-export" id="exportAllBtn" title="导出全部页为图片">📦</button>
+  </div>
+
+  <div class="export-toast" id="exportToast"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+
+  <script>
+    const slides = document.querySelectorAll('.slide');
+    const total = slides.length;
+    let current = 0;
+
+    const prevBtn = document.getElementById('prevBtn');
+    const nextBtn = document.getElementById('nextBtn');
+    const currentPageEl = document.getElementById('currentPage');
+    const progressBar = document.getElementById('progressBar');
+
+    function update() {
+      slides.forEach((s, i) => {
+        s.classList.remove('active', 'prev');
+        if (i === current) s.classList.add('active');
+        else if (i < current) s.classList.add('prev');
+      });
+      currentPageEl.textContent = current + 1;
+      progressBar.style.width = ((current + 1) / total * 100) + '%';
+      prevBtn.disabled = current === 0;
+      nextBtn.disabled = current === total - 1;
+    }
+
+    function next() {
+      if (current < total - 1) { current++; update(); }
+    }
+    function prev() {
+      if (current > 0) { current--; update(); }
+    }
+
+    nextBtn.addEventListener('click', next);
+    prevBtn.addEventListener('click', prev);
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') {
+        e.preventDefault();
+        next();
+      } else if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
+        e.preventDefault();
+        prev();
+      } else if (e.key === 'Home') {
+        current = 0; update();
+      } else if (e.key === 'End') {
+        current = total - 1; update();
+      }
+    });
+
+    let touchStartX = 0;
+    document.addEventListener('touchstart', (e) => {
+      touchStartX = e.touches[0].clientX;
+    }, { passive: true });
+    document.addEventListener('touchend', (e) => {
+      const dx = e.changedTouches[0].clientX - touchStartX;
+      if (Math.abs(dx) > 50) {
+        if (dx < 0) next(); else prev();
+      }
+    }, { passive: true });
+
+    update();
+
+    // === 导出图片功能 ===
+    const slideNames = ['封面', '开场白-关于连载', '开场白-本期看点', '本期进度', '感受与下期', '谢谢'];
+    const exportBtn = document.getElementById('exportBtn');
+    const exportAllBtn = document.getElementById('exportAllBtn');
+    const toast = document.getElementById('exportToast');
+    let exporting = false;
+
+    function showToast(msg, isSuccess) {
+      toast.innerHTML = isSuccess ? `<span class="toast-icon">✓</span>${msg}` : `<span class="toast-icon"></span>${msg}`;
+      toast.classList.add('show');
+      toast.classList.toggle('success', !!isSuccess);
+    }
+    function hideToast() {
+      toast.classList.remove('show');
+    }
+
+    function sleep(ms) {
+      return new Promise(r => setTimeout(r, ms));
+    }
+
+    async function captureSlide(idx) {
+      const slide = slides[idx];
+      // 渐变文字降级：html2canvas 对 background-clip:text 支持不稳定，截图时用实色
+      const canvas = await html2canvas(slide, {
+        backgroundColor: '#0f0f17',
+        scale: 2,
+        useCORS: true,
+        logging: false,
+        onclone: (doc) => {
+          const cloned = doc.querySelector('.slide.active') || doc.querySelectorAll('.slide')[idx];
+          // 渐变标题降级为实色
+          cloned.querySelectorAll('.cover-title, .thanks-title').forEach(el => {
+            el.style.webkitTextFillColor = '#c4b5fd';
+            el.style.color = '#c4b5fd';
+            el.style.background = 'none';
+          });
+        }
+      });
+      return canvas;
+    }
+
+    function downloadCanvas(canvas, idx) {
+      const num = String(idx + 1).padStart(2, '0');
+      const name = slideNames[idx] || `page${num}`;
+      const link = document.createElement('a');
+      link.download = `passbox-ep1-${num}-${name}.png`;
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+    }
+
+    async function exportCurrent() {
+      if (exporting) return;
+      exporting = true;
+      exportBtn.classList.add('loading');
+      showToast(`正在导出第 ${current + 1} 页...`);
+      try {
+        const canvas = await captureSlide(current);
+        downloadCanvas(canvas, current);
+        hideToast();
+        showToast(`第 ${current + 1} 页已导出`, true);
+        setTimeout(hideToast, 1800);
+      } catch (e) {
+        console.error(e);
+        hideToast();
+        showToast('导出失败，请重试');
+        setTimeout(hideToast, 2000);
+      } finally {
+        exportBtn.classList.remove('loading');
+        exporting = false;
+      }
+    }
+
+    async function exportAll() {
+      if (exporting) return;
+      exporting = true;
+      exportAllBtn.classList.add('loading');
+      const originIdx = current;
+      try {
+        for (let i = 0; i < total; i++) {
+          // 切换到目标页并等待过渡完成
+          current = i;
+          update();
+          await sleep(650);
+          showToast(`正在导出 ${i + 1} / ${total} ...`);
+          const canvas = await captureSlide(i);
+          downloadCanvas(canvas, i);
+          await sleep(150);
+        }
+        // 回到原页
+        current = originIdx;
+        update();
+        hideToast();
+        showToast(`全部 ${total} 页已导出`, true);
+        setTimeout(hideToast, 2000);
+      } catch (e) {
+        console.error(e);
+        hideToast();
+        showToast('导出中断，请重试');
+        setTimeout(hideToast, 2000);
+      } finally {
+        exportAllBtn.classList.remove('loading');
+        exporting = false;
+      }
+    }
+
+    exportBtn.addEventListener('click', exportCurrent);
+    exportAllBtn.addEventListener('click', exportAll);
+  </script>
+</body>
+</html>

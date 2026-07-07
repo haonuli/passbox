@@ -4,11 +4,14 @@
  * 基于 zxcvbn-ts 评估，显示 0-4 分对应的红/黄/绿进度条 + 文字标签 + 改进建议。
  * 可复用于注册页、生成器、条目编辑表单。
  *
+ * assessPassword 为异步函数（zxcvbn-ts 懒加载，避免 SSR 时 node:fs 崩溃），
+ * 因此使用 useState + useEffect 代替 useMemo。
+ *
  * @see TASK_BREAKDOWN T5.2 验收标准
  */
 'use client';
 
-import { useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import { assessPassword, type StrengthLabel } from '@/lib/crypto/strength';
 
@@ -25,9 +28,20 @@ interface StrengthIndicatorProps {
 }
 
 export function StrengthIndicator({ password, showSuggestions = true }: StrengthIndicatorProps) {
-  const result = useMemo(() => assessPassword(password), [password]);
+  const [result, setResult] = useState<Awaited<ReturnType<typeof assessPassword>> | null>(null);
 
-  if (password.length === 0) return null;
+  useEffect(() => {
+    if (password.length === 0) {
+      return;
+    }
+    let cancelled = false;
+    assessPassword(password).then((r) => {
+      if (!cancelled) setResult(r);
+    });
+    return () => { cancelled = true; };
+  }, [password]);
+
+  if (password.length === 0 || !result) return null;
 
   const config = LABEL_CONFIG[result.label];
 

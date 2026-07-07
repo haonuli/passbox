@@ -18,6 +18,7 @@ export function SecurityView() {
   const items = useVaultStore((s) => s.items);
   const loaded = useVaultStore((s) => s.loaded);
   const [duplicates, setDuplicates] = useState<DuplicateGroup[]>([]);
+  const [weakPasswords, setWeakPasswords] = useState<{ id: string; title: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedSection, setExpandedSection] = useState<string | null>(null);
 
@@ -26,22 +27,30 @@ export function SecurityView() {
     let cancelled = false;
     (async () => {
       setLoading(true);
-      const result = await detectDuplicatePasswords(items);
+      // 并行检测重复密码和弱密码（assessPassword 为异步）
+      const [dupResult, weakResult] = await Promise.all([
+        detectDuplicatePasswords(items),
+        (async () => {
+          const loginItems = items.filter((i) => i.itemTypeCode === 'login' && i.data.password);
+          const weak: { id: string; title: string }[] = [];
+          // 逐个评估密码强度
+          for (const item of loginItems) {
+            const assessment = await assessPassword(item.data.password!);
+            if (assessment.label === 'weak') {
+              weak.push({ id: item.id, title: item.title });
+            }
+          }
+          return weak;
+        })(),
+      ]);
       if (!cancelled) {
-        setDuplicates(result);
+        setDuplicates(dupResult);
+        setWeakPasswords(weakResult);
         setLoading(false);
       }
     })();
     return () => { cancelled = true; };
   }, [items, loaded]);
-
-  // 弱密码检测
-  const weakPasswords = useMemo(() => {
-    return items
-      .filter((i) => i.itemTypeCode === 'login' && i.data.password)
-      .filter((i) => assessPassword(i.data.password!).label === 'weak')
-      .map((i) => ({ id: i.id, title: i.title }));
-  }, [items]);
 
   // 安全评分计算 (T6.7)
   const score = useMemo(() => {

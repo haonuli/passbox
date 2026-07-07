@@ -13,9 +13,11 @@ import { SESSION_COOKIE_NAME, verifySession } from '@/lib/session';
  */
 const CSP_HEADER = [
   "default-src 'self'",
-  // 开发模式需要 'unsafe-inline'（Next.js HMR + Turbopack 内联脚本）；生产模式应使用 nonce
+  // 开发模式需要 'unsafe-inline'（Next.js HMR + Turbopack 内联脚本）
+  // 和 'unsafe-eval'（React 开发模式需要 eval() 重建调用栈等调试功能）；
+  // 生产模式应使用 nonce 替代 'unsafe-inline'
   process.env.NODE_ENV === 'development'
-    ? "script-src 'self' 'wasm-unsafe-eval' 'unsafe-inline'"
+    ? "script-src 'self' 'wasm-unsafe-eval' 'unsafe-inline' 'unsafe-eval'"
     : "script-src 'self' 'wasm-unsafe-eval'",
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: https:",
@@ -79,10 +81,11 @@ function applySecurityHeaders(response: NextResponse): NextResponse {
  * 执行顺序：
  * 1. 路由守卫：未认证访问 (app)/* → 重定向 /login（携带 redirect）
  * 2. 路由守卫：已认证访问 (auth)/* → 重定向 /vault
+ *    例外：?session=invalid 时清除无效 cookie 并放行（防重定向循环）
  * 3. 所有响应（含重定向）注入 CSP 等安全头
  */
 export async function middleware(request: NextRequest) {
-  const { pathname } = request.nextUrl;
+  const { pathname, searchParams } = request.nextUrl;
   const sessionToken = request.cookies.get(SESSION_COOKIE_NAME)?.value;
   const session = await verifySession(sessionToken);
   const isAuthenticated = session !== null;
@@ -95,7 +98,15 @@ export async function middleware(request: NextRequest) {
   }
 
   // 已认证访问认证路由 → 重定向到密码库
+  // 防重定向循环：当 (app)/layout 检测到 JWT 签名有效但 DB 校验失败时，
+  // 会重定向到 /login?session=invalid。此时中间件应清除无效 cookie 并放行，
+  // 而非再次重定向到 /vault 形成死循环。
   if (isAuthPath(pathname) && isAuthenticated) {
+    if (searchParams.get('session') === 'invalid') {
+      const response = NextResponse.next();
+      response.cookies.delete(SESSION_COOKIE_NAME);
+      return applySecurityHeaders(response);
+    }
     return applySecurityHeaders(NextResponse.redirect(new URL('/vault', request.url)));
   }
 
