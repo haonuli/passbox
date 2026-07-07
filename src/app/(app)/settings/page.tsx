@@ -4,13 +4,11 @@
  * 设置入口列表，链接到各子设置页。
  */
 import Link from 'next/link';
-import { Shield, Bell, Palette, Database } from 'lucide-react';
+import { Shield, Palette } from 'lucide-react';
 
 const SETTINGS_ITEMS = [
   { href: '/settings/security', label: '安全设置', description: '两步验证（2FA）、账户安全', icon: Shield },
-  { href: '/settings/preferences', label: '偏好设置', description: '剪贴板清除时间、主题', icon: Palette },
-  { href: '/settings/notifications', label: '通知', description: '通知偏好', icon: Bell },
-  { href: '/settings/data', label: '数据管理', description: '导入导出、备份', icon: Database },
+  { href: '/settings/preferences', label: '偏好设置', description: '自动锁定时长、剪贴板清除时间', icon: Palette },
 ];
 
 export default function SettingsPage() {

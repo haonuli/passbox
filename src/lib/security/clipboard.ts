@@ -66,6 +66,11 @@ export async function copyToClipboard(
     return false;
   }
 
+  // 0 表示不自动清除（仅复制，不启动定时器）
+  if (clearAfterSeconds <= 0) {
+    return true;
+  }
+
   // 启动自动清除定时器
   activeClearAt = Date.now() + clearAfterSeconds * 1000;
   activeTimer = setTimeout(async () => {

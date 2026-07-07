@@ -23,6 +23,7 @@ import {
 } from '@/lib/crypto/password-generator';
 import { StrengthIndicator } from '@/components/common/strength-indicator';
 import { useClipboard } from '@/hooks/use-clipboard';
+import { useSettingsStore } from '@/stores/settings-store';
 
 export function GeneratorPanel() {
   const [options, setOptions] = useState<PasswordGeneratorOptions>(DEFAULT_OPTIONS);
@@ -34,6 +35,7 @@ export function GeneratorPanel() {
     }
   });
   const { copy, copying } = useClipboard();
+  const clipboardClearSeconds = useSettingsStore((s) => s.clipboardClearSeconds);
   const [copied, setCopied] = useState(false);
 
   const regenerate = useCallback(() => {
@@ -63,10 +65,10 @@ export function GeneratorPanel() {
   );
 
   const handleCopy = useCallback(async () => {
-    await copy(password, 30, '密码');
+    await copy(password, clipboardClearSeconds, '密码');
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
-  }, [password, copy]);
+  }, [password, copy, clipboardClearSeconds]);
 
   const optionChecks: { key: keyof PasswordGeneratorOptions; label: string }[] = [
     { key: 'uppercase', label: '大写字母 (A-Z)' },

@@ -11,6 +11,7 @@
  */
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
+import { DEFAULT_CLIPBOARD_CLEAR_SECONDS } from '@/lib/security/clipboard';
 
 /** 自动锁定超时选项（分钟）；0 表示永不自动锁定 */
 export type LockTimeoutMinutes = 1 | 5 | 10 | 30 | 0;
@@ -30,11 +31,29 @@ export const LOCK_TIMEOUT_OPTIONS: ReadonlyArray<{
 /** 默认自动锁定时长（分钟） */
 export const DEFAULT_LOCK_TIMEOUT: LockTimeoutMinutes = 10;
 
+/** 剪贴板清除时间选项（秒）；0 表示不自动清除 */
+export type ClipboardClearSeconds = 0 | 10 | 30 | 60;
+
+/** 可选剪贴板清除时间列表（用于设置页 UI） */
+export const CLIPBOARD_CLEAR_SETTING_OPTIONS: ReadonlyArray<{
+  value: ClipboardClearSeconds;
+  label: string;
+}> = [
+  { value: 0, label: '不自动清除' },
+  { value: 10, label: '10 秒' },
+  { value: 30, label: '30 秒' },
+  { value: 60, label: '60 秒' },
+];
+
 interface SettingsStore {
   /** 自动锁定超时（分钟），0 = 永不 */
   lockTimeoutMinutes: LockTimeoutMinutes;
   /** 设置自动锁定时长 */
   setLockTimeoutMinutes: (minutes: LockTimeoutMinutes) => void;
+  /** 剪贴板自动清除时间（秒），0 = 不自动清除 */
+  clipboardClearSeconds: ClipboardClearSeconds;
+  /** 设置剪贴板清除时间 */
+  setClipboardClearSeconds: (seconds: ClipboardClearSeconds) => void;
   /** persist 水合完成标志（客户端从 localStorage 读取后置 true） */
   _hasHydrated: boolean;
 }
@@ -44,12 +63,17 @@ export const useSettingsStore = create<SettingsStore>()(
     (set) => ({
       lockTimeoutMinutes: DEFAULT_LOCK_TIMEOUT,
       setLockTimeoutMinutes: (minutes) => set({ lockTimeoutMinutes: minutes }),
+      clipboardClearSeconds: DEFAULT_CLIPBOARD_CLEAR_SECONDS as ClipboardClearSeconds,
+      setClipboardClearSeconds: (seconds) => set({ clipboardClearSeconds: seconds }),
       _hasHydrated: false,
     }),
     {
       name: 'passbox-settings',
       storage: createJSONStorage(() => localStorage),
-      partialize: (state) => ({ lockTimeoutMinutes: state.lockTimeoutMinutes }),
+      partialize: (state) => ({
+        lockTimeoutMinutes: state.lockTimeoutMinutes,
+        clipboardClearSeconds: state.clipboardClearSeconds,
+      }),
       onRehydrateStorage: () => (state) => {
         if (state) {
           state._hasHydrated = true;

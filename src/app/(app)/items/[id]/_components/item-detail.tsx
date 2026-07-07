@@ -38,6 +38,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { useVaultStore } from '@/stores/vault-store';
+import { useSettingsStore } from '@/stores/settings-store';
 import { deleteItem, toggleFavorite } from '@/actions/item';
 import { useClipboard } from '@/hooks/use-clipboard';
 import { TotpDisplay } from '@/components/item/totp-display';
@@ -93,6 +94,7 @@ export function ItemDetail({ itemId }: ItemDetailProps) {
   const [deleting, setDeleting] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const { copy } = useClipboard();
+  const clipboardClearSeconds = useSettingsStore((s) => s.clipboardClearSeconds);
 
   const item = items.find((i) => i.id === itemId);
 
@@ -140,9 +142,9 @@ export function ItemDetail({ itemId }: ItemDetailProps) {
 
   const handleCopyPassword = useCallback(() => {
     if (item?.data.password) {
-      copy(item.data.password, 30, '密码');
+      copy(item.data.password, clipboardClearSeconds, '密码');
     }
-  }, [item, copy]);
+  }, [item, copy, clipboardClearSeconds]);
 
   const handleOpenWebsite = useCallback(() => {
     if (item?.data.url) {
