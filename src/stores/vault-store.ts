@@ -29,11 +29,24 @@ const TITLE_AAD_SUFFIX = ':title';
 const DATA_AAD_PREFIX = 'item:';
 const DATA_AAD_SUFFIX = ':data';
 
-/** item_type_id → code 映射（与 migrate.ts 预置数据一致） */
+/** item_type_id -> code 映射（与 migrate.ts 预置数据一致） */
 const ITEM_TYPE_CODE_MAP: Record<number, string> = {
   1: 'login',
   2: 'secure_note',
   3: 'credit_card',
+  4: 'identity',
+  5: 'password',
+  6: 'software_license',
+  7: 'bank_account',
+  8: 'wireless_router',
+  9: 'server',
+  10: 'database',
+  11: 'api_credential',
+  12: 'crypto_wallet',
+  13: 'driver_license',
+  14: 'passport',
+  15: 'membership',
+  16: 'reward_program',
 };
 
 /** 保险库名称解密 AAD */

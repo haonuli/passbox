@@ -1,8 +1,8 @@
 /**
  * 条目新建/编辑表单 (T4.6 / T6.3)
  *
- * 共享表单组件，支持 create / edit 两种模式。
- * T6.3: 支持三种条目类型（login / secure_note / credit_card），动态切换字段。
+ * 数据驱动渲染：从 ITEM_TYPE_CONFIGS 读取类型与字段配置，
+ * 动态渲染表单字段，新增类型无需修改本组件。
  *
  * 保存时客户端加密流程：
  * 1. 生成 itemId（UUID，仅 create 模式）
@@ -11,17 +11,15 @@
  *    - data AAD = `item:${itemId}:data`
  * 3. 调用 createItem / updateItem Server Action
  * 4. 成功后更新 vault-store 缓存并跳转
- *
- * @see TASK_BREAKDOWN T4.6 / T6.3 验收标准
  */
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { useForm } from 'react-hook-form';
+import { useForm, type UseFormRegister } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { ArrowLeft, Loader2, Save, KeyRound, FileText, CreditCard } from 'lucide-react';
+import { ArrowLeft, Loader2, Save } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -33,49 +31,94 @@ import { useAuthStore } from '@/stores/auth-store';
 import { useVaultStore } from '@/stores/vault-store';
 import { createItem, updateItem } from '@/actions/item';
 import { encrypt } from '@/lib/crypto/aes';
+import { ITEM_TYPE_CONFIGS, type FieldConfig, type ItemTypeConfig } from '@/lib/item-types';
 import type { EncryptedData } from '@/types/crypto';
 import type { DecryptedItem, ItemData } from '@/types/vault';
 import { cn } from '@/lib/utils';
 
-/** 条目类型选项 */
-type ItemTypeId = 1 | 2 | 3;
+/** 所有可能的表单值（title + 所有字段） */
+type FormValues = Record<string, string> & { title: string };
 
-const TYPE_OPTIONS: { id: ItemTypeId; label: string; icon: typeof KeyRound }[] = [
-  { id: 1, label: '登录', icon: KeyRound },
-  { id: 2, label: '安全笔记', icon: FileText },
-  { id: 3, label: '信用卡', icon: CreditCard },
-];
+/** 从字段配置生成 zod schema */
+function buildSchema(config: ItemTypeConfig): z.ZodType<FormValues> {
+  const shape: Record<string, z.ZodTypeAny> = {
+    title: z.string().min(1, '请输入标题').max(200, '标题不能超过 200 字'),
+  };
+  for (const field of config.fields) {
+    const maxLen = field.maxLength ?? (field.type === 'textarea' ? 10000 : 500);
+    shape[field.name] = z.string().max(maxLen).optional().or(z.literal(''));
+  }
+  return z.object(shape) as unknown as z.ZodType<FormValues>;
+}
 
-const TYPE_CODE_MAP: Record<ItemTypeId, string> = {
-  1: 'login',
-  2: 'secure_note',
-  3: 'credit_card',
-};
+/** 将字段列表按行分组（col:1 + col:2 配对） */
+function groupFieldsByRow(fields: FieldConfig[]): FieldConfig[][] {
+  const rows: FieldConfig[][] = [];
+  let i = 0;
+  while (i < fields.length) {
+    if (fields[i].col === 1 && i + 1 < fields.length && fields[i + 1].col === 2) {
+      rows.push([fields[i], fields[i + 1]]);
+      i += 2;
+    } else {
+      rows.push([fields[i]]);
+      i += 1;
+    }
+  }
+  return rows;
+}
 
-// ---- zod 校验（包含所有类型字段，按类型动态使用） ----
-const itemFormSchema = z.object({
-  title: z.string().min(1, '请输入标题').max(200, '标题不能超过 200 字'),
-  // login 字段
-  url: z.string().max(500, '网址不能超过 500 字').optional().or(z.literal('')),
-  username: z.string().max(200, '用户名不能超过 200 字').optional().or(z.literal('')),
-  password: z.string().max(500, '密码不能超过 500 字').optional().or(z.literal('')),
-  totpSecret: z.string().max(200, 'TOTP 密钥不能超过 200 字').optional().or(z.literal('')),
-  // secure_note 字段
-  noteText: z.string().max(10000, '笔记不能超过 10000 字').optional().or(z.literal('')),
-  // credit_card 字段
-  cardholder: z.string().max(200, '持卡人不能超过 200 字').optional().or(z.literal('')),
-  cardNumber: z.string().max(200, '卡号不能超过 200 字').optional().or(z.literal('')),
-  expiry: z.string().max(20, '有效期不能超过 20 字').optional().or(z.literal('')),
-  cvv: z.string().max(10, 'CVV 不能超过 10 字').optional().or(z.literal('')),
-  // 通用
-  notes: z.string().max(5000, '备注不能超过 5000 字').optional().or(z.literal('')),
-});
+/** 渲染单个字段 */
+function FieldInput({ field, register, error }: {
+  field: FieldConfig;
+  register: UseFormRegister<FormValues>;
+  error?: string;
+}) {
+  const fieldId = `field-${field.name}`;
+  const errorEl = error ? <p className="text-xs text-destructive">{error}</p> : null;
 
-type ItemFormValues = z.infer<typeof itemFormSchema>;
+  if (field.type === 'textarea') {
+    const minH = field.name === 'noteText' ? 200 : 80;
+    return (
+      <div className="space-y-1.5">
+        <Label htmlFor={fieldId}>{field.label}</Label>
+        <textarea
+          id={fieldId}
+          className="flex min-h-[var(--min-h)] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+          style={{ ['--min-h' as string]: `${minH}px` }}
+          placeholder={field.placeholder}
+          {...register(field.name)}
+        />
+        {errorEl}
+      </div>
+    );
+  }
+
+  if (field.type === 'password') {
+    return (
+      <div className="space-y-1.5">
+        <Label htmlFor={fieldId}>{field.label}</Label>
+        <PasswordInput id={fieldId} placeholder={field.placeholder} {...register(field.name)} />
+        {errorEl}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-1.5">
+      <Label htmlFor={fieldId}>{field.label}</Label>
+      <Input
+        id={fieldId}
+        type={field.type === 'date' ? 'date' : 'text'}
+        placeholder={field.placeholder}
+        {...register(field.name)}
+      />
+      {errorEl}
+    </div>
+  );
+}
 
 interface ItemFormProps {
   mode: 'create' | 'edit';
-  /** 编辑模式时传入 */
   itemId?: string;
 }
 
@@ -90,89 +133,62 @@ export function ItemForm({ mode, itemId }: ItemFormProps) {
     ? items.find((i) => i.id === itemId)
     : undefined;
 
-  // 条目类型（编辑模式时锁定，不可更改）
-  const [itemType, setItemType] = useState<ItemTypeId>(
-    (existingItem?.itemTypeId as ItemTypeId) ?? 1,
+  const [itemTypeId, setItemTypeId] = useState(
+    existingItem?.itemTypeId ?? 1,
   );
-
-  // 保险库选择
   const [vaultId, setVaultId] = useState(
     existingItem?.vaultId ?? vaults[0]?.id ?? '',
   );
+
+  const currentConfig = useMemo(
+    () => ITEM_TYPE_CONFIGS.find((t) => t.id === itemTypeId) ?? ITEM_TYPE_CONFIGS[0],
+    [itemTypeId],
+  );
+
+  const schema = useMemo(() => buildSchema(currentConfig), [currentConfig]);
+  const fieldRows = useMemo(() => groupFieldsByRow(currentConfig.fields), [currentConfig]);
 
   const {
     register,
     handleSubmit,
     reset,
     formState: { errors },
-  } = useForm<ItemFormValues>({
-    resolver: zodResolver(itemFormSchema),
-    defaultValues: {
-      title: '',
-      url: '',
-      username: '',
-      password: '',
-      totpSecret: '',
-      noteText: '',
-      cardholder: '',
-      cardNumber: '',
-      expiry: '',
-      cvv: '',
-      notes: '',
-    },
+  } = useForm<FormValues>({
+    resolver: zodResolver(schema),
+    defaultValues: useMemo(() => {
+      const defaults: Record<string, string> = { title: '' };
+      for (const f of currentConfig.fields) {
+        defaults[f.name] = '';
+      }
+      return defaults as FormValues;
+    }, [currentConfig]),
   });
 
   // 编辑模式：预填充已有数据
   useEffect(() => {
     if (mode === 'edit' && existingItem) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
-      setItemType(existingItem.itemTypeId as ItemTypeId);
-      reset({
-        title: existingItem.title,
-        url: existingItem.data.url ?? '',
-        username: existingItem.data.username ?? '',
-        password: existingItem.data.password ?? '',
-        totpSecret: existingItem.data.totpSecret ?? '',
-        noteText: existingItem.data.noteText ?? '',
-        cardholder: existingItem.data.cardholder ?? '',
-        cardNumber: existingItem.data.cardNumber ?? '',
-        expiry: existingItem.data.expiry ?? '',
-        cvv: existingItem.data.cvv ?? '',
-        notes: existingItem.data.notes ?? '',
-      });
+      setItemTypeId(existingItem.itemTypeId);
+      const values: Record<string, string> = { title: existingItem.title };
+      for (const f of currentConfig.fields) {
+        values[f.name] = (existingItem.data as Record<string, string | undefined>)[f.name] ?? '';
+      }
+      reset(values as FormValues);
     }
-  }, [mode, existingItem, reset]);
+  }, [mode, existingItem, reset, currentConfig]);
 
   /** 根据条目类型构建 payload */
-  const buildPayload = useCallback((values: ItemFormValues): ItemData => {
-    switch (itemType) {
-      case 1: // login
-        return {
-          url: values.url || undefined,
-          username: values.username || undefined,
-          password: values.password || undefined,
-          totpSecret: values.totpSecret || undefined,
-          notes: values.notes || undefined,
-        };
-      case 2: // secure_note
-        return {
-          noteText: values.noteText || undefined,
-        };
-      case 3: // credit_card
-        return {
-          cardholder: values.cardholder || undefined,
-          cardNumber: values.cardNumber || undefined,
-          expiry: values.expiry || undefined,
-          cvv: values.cvv || undefined,
-          notes: values.notes || undefined,
-        };
-      default:
-        return {};
+  const buildPayload = useCallback((values: FormValues): ItemData => {
+    const payload: Record<string, string> = {};
+    for (const field of currentConfig.fields) {
+      const value = values[field.name];
+      if (value) payload[field.name] = value;
     }
-  }, [itemType]);
+    return payload as ItemData;
+  }, [currentConfig]);
 
   const onSubmit = useCallback(
-    async (values: ItemFormValues) => {
+    async (values: FormValues) => {
       if (!symmetricKey) {
         toast.error('密码库未解锁');
         return;
@@ -209,7 +225,7 @@ export function ItemForm({ mode, itemId }: ItemFormProps) {
         if (mode === 'create') {
           const result = await createItem({
             vaultId: targetVaultId,
-            itemTypeId: itemType,
+            itemTypeId,
             titleEncrypted,
             dataEncrypted,
             tagIds: selectedTagIds,
@@ -220,7 +236,7 @@ export function ItemForm({ mode, itemId }: ItemFormProps) {
               id: result.data.id,
               vaultId: result.data.vault_id,
               itemTypeId: result.data.item_type_id,
-              itemTypeCode: TYPE_CODE_MAP[itemType],
+              itemTypeCode: currentConfig.code,
               title: values.title,
               data: payload,
               isFavorite: false,
@@ -262,7 +278,7 @@ export function ItemForm({ mode, itemId }: ItemFormProps) {
         setSaving(false);
       }
     },
-    [symmetricKey, mode, existingItem, vaults, upsertItem, router, itemType, buildPayload, vaultId, selectedTagIds],
+    [symmetricKey, mode, existingItem, vaults, upsertItem, router, itemTypeId, buildPayload, vaultId, selectedTagIds, currentConfig],
   );
 
   // 编辑模式但条目不存在
@@ -302,8 +318,8 @@ export function ItemForm({ mode, itemId }: ItemFormProps) {
         {/* 类型选择器（仅 create 模式可切换） */}
         <div className="space-y-1.5">
           <Label>条目类型</Label>
-          <div className="flex gap-2">
-            {TYPE_OPTIONS.map((opt) => {
+          <div className="flex flex-wrap gap-2">
+            {ITEM_TYPE_CONFIGS.map((opt) => {
               const Icon = opt.icon;
               const isDisabled = mode === 'edit';
               return (
@@ -311,17 +327,17 @@ export function ItemForm({ mode, itemId }: ItemFormProps) {
                   key={opt.id}
                   type="button"
                   disabled={isDisabled}
-                  onClick={() => setItemType(opt.id)}
+                  onClick={() => setItemTypeId(opt.id)}
                   className={cn(
                     'flex items-center gap-1.5 rounded-md border px-3 py-2 text-sm font-medium transition-colors',
-                    itemType === opt.id
+                    itemTypeId === opt.id
                       ? 'border-primary bg-primary text-primary-foreground'
                       : 'border-border text-muted-foreground hover:bg-muted',
                     isDisabled && 'cursor-not-allowed opacity-60',
                   )}
                 >
                   <Icon className="h-4 w-4" />
-                  {opt.label}
+                  {opt.name}
                 </button>
               );
             })}
@@ -336,7 +352,7 @@ export function ItemForm({ mode, itemId }: ItemFormProps) {
             placeholder="例如：Google 账号"
             {...register('title')}
           />
-          {errors.title && (
+          {errors.title?.message && (
             <p className="text-xs text-destructive">{errors.title.message}</p>
           )}
         </div>
@@ -347,93 +363,32 @@ export function ItemForm({ mode, itemId }: ItemFormProps) {
           <VaultSelect value={vaultId} onChange={setVaultId} />
         </div>
 
-        {/* Login 类型字段 */}
-        {itemType === 1 && (
-          <>
-            <div className="space-y-1.5">
-              <Label htmlFor="url">网址</Label>
-              <Input id="url" placeholder="https://example.com" {...register('url')} />
-              {errors.url && <p className="text-xs text-destructive">{errors.url.message}</p>}
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="username">用户名</Label>
-              <Input id="username" placeholder="用户名或邮箱" {...register('username')} />
-              {errors.username && <p className="text-xs text-destructive">{errors.username.message}</p>}
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="password">密码</Label>
-              <PasswordInput id="password" placeholder="输入或生成密码" {...register('password')} />
-              {errors.password && <p className="text-xs text-destructive">{errors.password.message}</p>}
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="totpSecret">一次性密码（TOTP）</Label>
-              <Input id="totpSecret" placeholder="粘贴 base32 密钥（可选）" autoComplete="off" {...register('totpSecret')} />
-              {errors.totpSecret && <p className="text-xs text-destructive">{errors.totpSecret.message}</p>}
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="notes">备注</Label>
-              <textarea
-                id="notes"
-                className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                placeholder="可选备注信息"
-                {...register('notes')}
+        {/* 动态字段（按类型从配置渲染） */}
+        {fieldRows.map((row, rowIdx) => {
+          if (row.length === 1) {
+            const field = row[0];
+            return (
+              <FieldInput
+                key={field.name}
+                field={field}
+                register={register}
+                error={errors[field.name]?.message as string | undefined}
               />
-              {errors.notes && <p className="text-xs text-destructive">{errors.notes.message}</p>}
+            );
+          }
+          return (
+            <div key={rowIdx} className="grid grid-cols-2 gap-3">
+              {row.map((field) => (
+                <FieldInput
+                  key={field.name}
+                  field={field}
+                  register={register}
+                  error={errors[field.name]?.message as string | undefined}
+                />
+              ))}
             </div>
-          </>
-        )}
-
-        {/* Secure Note 类型字段 */}
-        {itemType === 2 && (
-          <div className="space-y-1.5">
-            <Label htmlFor="noteText">笔记内容</Label>
-            <textarea
-              id="noteText"
-              className="flex min-h-[200px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-              placeholder="输入笔记内容…"
-              {...register('noteText')}
-            />
-            {errors.noteText && <p className="text-xs text-destructive">{errors.noteText.message}</p>}
-          </div>
-        )}
-
-        {/* Credit Card 类型字段 */}
-        {itemType === 3 && (
-          <>
-            <div className="space-y-1.5">
-              <Label htmlFor="cardholder">持卡人</Label>
-              <Input id="cardholder" placeholder="持卡人姓名" {...register('cardholder')} />
-              {errors.cardholder && <p className="text-xs text-destructive">{errors.cardholder.message}</p>}
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="cardNumber">卡号</Label>
-              <PasswordInput id="cardNumber" placeholder="信用卡号" {...register('cardNumber')} />
-              {errors.cardNumber && <p className="text-xs text-destructive">{errors.cardNumber.message}</p>}
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label htmlFor="expiry">有效期</Label>
-                <Input id="expiry" placeholder="MM/YY" {...register('expiry')} />
-                {errors.expiry && <p className="text-xs text-destructive">{errors.expiry.message}</p>}
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="cvv">CVV</Label>
-                <PasswordInput id="cvv" placeholder="安全码" {...register('cvv')} />
-                {errors.cvv && <p className="text-xs text-destructive">{errors.cvv.message}</p>}
-              </div>
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="notes">备注</Label>
-              <textarea
-                id="notes"
-                className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                placeholder="可选备注信息"
-                {...register('notes')}
-              />
-              {errors.notes && <p className="text-xs text-destructive">{errors.notes.message}</p>}
-            </div>
-          </>
-        )}
+          );
+        })}
 
         {/* 标签（所有类型通用） */}
         <div className="space-y-1.5">

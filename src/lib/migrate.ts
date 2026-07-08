@@ -136,17 +136,43 @@ const DDL_SCRIPTS: string[] = [
    FOR EACH ROW EXECUTE FUNCTION update_updated_at();`,
 ];
 
-// 预置数据：条目类型（显式 ID 确保 1/2/3，ON CONFLICT 保证幂等）
-// ⚠️ 使用显式 ID 而非 SERIAL 自增，因为前端代码（item-form.tsx / vault-store.ts）
-// 依赖固定的 ID 映射。SERIAL 自增在多次迁移/测试后可能产生非预期 ID（如 10/11/12）。
+// 预置数据：条目类型（显式 ID 确保 1-16，ON CONFLICT 保证幂等）
+// ⚠️ 使用显式 ID 而非 SERIAL 自增，因为前端代码（item-types.ts / vault-store.ts）
+// 依赖固定的 ID 映射。SERIAL 自增在多次迁移/测试后可能产生非预期 ID。
 const SEED_ITEM_TYPES_SQL = `
   INSERT INTO item_types (id, code, name, icon, field_schema, sort_order) VALUES
-    (1, 'login', '登录', 'key-round',
+    (1,  'login',           '登录',       'key-round',
      '{"fields":["title","url","username","password","totp_secret","notes"]}'::jsonb, 1),
-    (2, 'secure_note', '安全笔记', 'note',
+    (2,  'secure_note',     '安全笔记',   'file-text',
      '{"fields":["title","note_text"]}'::jsonb, 2),
-    (3, 'credit_card', '信用卡', 'credit-card',
-     '{"fields":["title","cardholder","card_number","expiry","cvv","notes"]}'::jsonb, 3)
+    (3,  'credit_card',     '信用卡',     'credit-card',
+     '{"fields":["title","cardholder","card_number","expiry","cvv","notes"]}'::jsonb, 3),
+    (4,  'identity',        '身份信息',   'user',
+     '{"fields":["title","first_name","last_name","gender","birth_date","address","city","state","zip","country","phone","email","website","notes"]}'::jsonb, 4),
+    (5,  'password',        '密码',       'lock',
+     '{"fields":["title","password","notes"]}'::jsonb, 5),
+    (6,  'software_license','软件许可证', 'award',
+     '{"fields":["title","software_name","software_version","licensee","license_key","publisher","website","order_number","purchase_date","notes"]}'::jsonb, 6),
+    (7,  'bank_account',    '银行账户',   'landmark',
+     '{"fields":["title","account_holder","account_number","bank_name","routing_number","iban","swift","notes"]}'::jsonb, 7),
+    (8,  'wireless_router', '无线路由器', 'wifi',
+     '{"fields":["title","network_name","password","encryption_type","base_station_name","ip","serial_number","notes"]}'::jsonb, 8),
+    (9,  'server',          '服务器',     'server',
+     '{"fields":["title","hostname","ip","port","username","password","admin_console_url","notes"]}'::jsonb, 9),
+    (10, 'database',        '数据库',     'database',
+     '{"fields":["title","host","port","database","type","username","password","notes"]}'::jsonb, 10),
+    (11, 'api_credential',  'API 凭证',   'code',
+     '{"fields":["title","api_key","api_secret","valid_from","expiration","notes"]}'::jsonb, 11),
+    (12, 'crypto_wallet',   '加密钱包',   'wallet',
+     '{"fields":["title","wallet_address","private_mnemonic","notes"]}'::jsonb, 12),
+    (13, 'driver_license',  '驾驶证',     'car',
+     '{"fields":["title","license_number","full_name","birth_date","issuing_authority","expiry_date","notes"]}'::jsonb, 13),
+    (14, 'passport',        '护照',       'book-open',
+     '{"fields":["title","passport_number","full_name","country","issue_date","expiry_date","notes"]}'::jsonb, 14),
+    (15, 'membership',      '会员',       'badge-check',
+     '{"fields":["title","organization","membership_number","member_name","phone","website","notes"]}'::jsonb, 15),
+    (16, 'reward_program',  '奖励计划',   'gift',
+     '{"fields":["title","program_name","member_name","membership_number","points_balance","notes"]}'::jsonb, 16)
   ON CONFLICT (code) DO UPDATE SET
     id = EXCLUDED.id,
     name = EXCLUDED.name,

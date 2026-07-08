@@ -9,26 +9,23 @@
 
 import { useCallback } from 'react';
 import Link from 'next/link';
-import { KeyRound, Star, Globe } from 'lucide-react';
+import { Star, FileText } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { useVaultStore } from '@/stores/vault-store';
 import { toggleFavorite } from '@/actions/item';
+import { getItemTypeConfigByCode } from '@/lib/item-types';
 import type { DecryptedItem } from '@/types/vault';
 
 interface ItemRowProps {
   item: DecryptedItem;
 }
 
-/** 条目类型图标映射 */
+/** 条目类型图标 */
 function ItemTypeIcon({ item }: { item: DecryptedItem }) {
-  if (item.itemTypeCode === 'login') {
-    return <KeyRound className="h-4 w-4 text-muted-foreground" />;
-  }
-  if (item.itemTypeCode === 'credit_card') {
-    return <Globe className="h-4 w-4 text-muted-foreground" />;
-  }
-  return <Globe className="h-4 w-4 text-muted-foreground" />;
+  const config = getItemTypeConfigByCode(item.itemTypeCode);
+  const Icon = config?.icon ?? FileText;
+  return <Icon className="h-4 w-4 text-muted-foreground" />;
 }
 
 export function ItemRow({ item }: ItemRowProps) {

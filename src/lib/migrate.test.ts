@@ -7,12 +7,12 @@ import { runMigrations } from './migrate';
  *
  * 验收标准（TASK_BREAKDOWN.md T1.3）：
  * - [x] 执行迁移后，6 张表均已创建，字段类型与 DDL 一致
- * - [x] item_types 表预置 3 条记录（login / secure_note / credit_card）
+ * - [x] item_types 表预置 16 条记录（login / secure_note / credit_card / ...）
  * - [x] 所有索引已创建（idx_items_user_updated 等）
  * - [x] updated_at 触发器在 UPDATE 操作时自动更新时间
  * - [x] 重复执行迁移不会报错（幂等性）
  *
- * M0-4: 6 张表创建成功，item_types 预置 3 条记录
+ * M0-4: 6 张表创建成功，item_types 预置 16 条记录
  * M0-5: 迁移脚本幂等（重复执行不报错）
  */
 describe('T1.3 数据库 DDL 迁移脚本', () => {
@@ -42,11 +42,11 @@ describe('T1.3 数据库 DDL 迁移脚本', () => {
       expect(tableNames).toContain('item_tags');
     });
 
-    it('item_types 应预置 3 条记录（login / secure_note / credit_card）', async () => {
+    it('item_types 应预置 16 条记录', async () => {
       const result = await db.query(
         'SELECT code, name, icon, sort_order FROM item_types ORDER BY sort_order',
       );
-      expect(result.rows).toHaveLength(3);
+      expect(result.rows).toHaveLength(16);
       expect(result.rows[0]).toMatchObject({
         code: 'login',
         name: '登录',
@@ -62,6 +62,10 @@ describe('T1.3 数据库 DDL 迁移脚本', () => {
         code: 'credit_card',
         name: '信用卡',
         sort_order: 3,
+      });
+      expect(result.rows[15]).toMatchObject({
+        code: 'reward_program',
+        sort_order: 16,
       });
     });
 
@@ -154,10 +158,10 @@ describe('T1.3 数据库 DDL 迁移脚本', () => {
       await expect(runMigrations()).resolves.not.toThrow();
     });
 
-    it('重复执行后 item_types 仍为 3 条', async () => {
+    it('重复执行后 item_types 仍为 16 条', async () => {
       await runMigrations();
       const result = await db.query('SELECT COUNT(*)::int AS count FROM item_types');
-      expect(result.rows[0].count).toBe(3);
+      expect(result.rows[0].count).toBe(16);
     });
   });
 });

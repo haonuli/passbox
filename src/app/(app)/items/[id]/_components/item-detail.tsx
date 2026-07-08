@@ -1,16 +1,16 @@
 /**
  * 条目详情组件 (T4.5 / T5.4 / T5.6)
  *
- * 展示登录条目的完整信息：标题、URL、用户名、密码（默认隐藏）、备注。
+ * 数据驱动渲染：从 ITEM_TYPE_CONFIGS 读取当前类型的字段配置，
+ * 动态渲染详情字段，新增类型无需修改本组件。
+ *
  * 提供编辑、删除、收藏切换操作按钮。
  * T5.4: TOTP 验证码实时展示
  * T5.6: 复制用户名/密码、打开网站便捷操作
- *
- * @see TASK_BREAKDOWN T4.5 / T5.4 / T5.6 验收标准
  */
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo, createElement } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   ArrowLeft,
@@ -19,13 +19,9 @@ import {
   Pencil,
   Trash2,
   Star,
-  Globe,
-  User,
-  KeyRound,
-  FileText,
-  Loader2,
   Copy,
   ExternalLink,
+  Loader2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -42,46 +38,61 @@ import { useSettingsStore } from '@/stores/settings-store';
 import { deleteItem, toggleFavorite } from '@/actions/item';
 import { useClipboard } from '@/hooks/use-clipboard';
 import { TotpDisplay } from '@/components/item/totp-display';
+import { getItemTypeConfigByCode, getFieldIcon, type FieldConfig } from '@/lib/item-types';
 
 interface ItemDetailProps {
   itemId: string;
 }
 
+/** 字段图标渲染 */
+function FieldIcon({ name, className }: { name: string; className?: string }) {
+  return createElement(getFieldIcon(name), { className });
+}
+
 /** 详情字段行 */
 function DetailField({
-  icon: Icon,
-  label,
+  field,
   value,
-  isPassword = false,
+  onCopy,
 }: {
-  icon: typeof Globe;
-  label: string;
-  value?: string;
-  isPassword?: boolean;
+  field: FieldConfig;
+  value: string;
+  onCopy?: (value: string, label: string) => void;
 }) {
   const [show, setShow] = useState(false);
-
-  if (!value) return null;
+  const isPassword = field.type === 'password';
 
   return (
     <div className="flex items-start gap-3 border-b border-border px-4 py-3">
-      <Icon className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+      <FieldIcon name={field.name} className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
       <div className="min-w-0 flex-1">
-        <div className="text-xs text-muted-foreground">{label}</div>
+        <div className="text-xs text-muted-foreground">{field.label}</div>
         <div className="mt-0.5 break-all text-sm font-medium">
           {isPassword && !show ? '••••••••' : value}
         </div>
       </div>
-      {isPassword && (
-        <button
-          type="button"
-          onClick={() => setShow((v) => !v)}
-          className="shrink-0 text-muted-foreground hover:text-foreground"
-          aria-label={show ? '隐藏' : '显示'}
-        >
-          {show ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-        </button>
-      )}
+      <div className="flex shrink-0 gap-1">
+        {isPassword && (
+          <button
+            type="button"
+            onClick={() => setShow((v) => !v)}
+            className="text-muted-foreground hover:text-foreground"
+            aria-label={show ? '隐藏' : '显示'}
+          >
+            {show ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+          </button>
+        )}
+        {onCopy && (
+          <button
+            type="button"
+            onClick={() => onCopy(value, field.label)}
+            className="text-muted-foreground hover:text-foreground"
+            aria-label={`复制${field.label}`}
+          >
+            <Copy className="h-4 w-4" />
+          </button>
+        )}
+      </div>
     </div>
   );
 }
@@ -97,6 +108,11 @@ export function ItemDetail({ itemId }: ItemDetailProps) {
   const clipboardClearSeconds = useSettingsStore((s) => s.clipboardClearSeconds);
 
   const item = items.find((i) => i.id === itemId);
+
+  const typeConfig = useMemo(
+    () => (item ? getItemTypeConfigByCode(item.itemTypeCode) : undefined),
+    [item],
+  );
 
   const handleDelete = useCallback(async () => {
     if (!item) return;
@@ -134,22 +150,16 @@ export function ItemDetail({ itemId }: ItemDetailProps) {
     }
   }, [item, updateFavorite]);
 
-  const handleCopyUsername = useCallback(() => {
-    if (item?.data.username) {
-      copy(item.data.username, 0, '用户名');
-    }
-  }, [item, copy]);
-
-  const handleCopyPassword = useCallback(() => {
-    if (item?.data.password) {
-      copy(item.data.password, clipboardClearSeconds, '密码');
-    }
-  }, [item, copy, clipboardClearSeconds]);
+  const handleCopy = useCallback(
+    (value: string, label: string, sensitive: boolean) => {
+      copy(value, sensitive ? clipboardClearSeconds : 0, label);
+    },
+    [copy, clipboardClearSeconds],
+  );
 
   const handleOpenWebsite = useCallback(() => {
     if (item?.data.url) {
       let url = item.data.url;
-      // 确保 URL 有协议前缀
       if (!url.startsWith('http://') && !url.startsWith('https://')) {
         url = `https://${url}`;
       }
@@ -168,6 +178,9 @@ export function ItemDetail({ itemId }: ItemDetailProps) {
       </div>
     );
   }
+
+  // 未知类型兜底
+  const fields = typeConfig?.fields ?? [];
 
   return (
     <div className="flex h-full flex-col">
@@ -217,41 +230,23 @@ export function ItemDetail({ itemId }: ItemDetailProps) {
 
       {/* 详情内容 */}
       <div className="flex-1 overflow-auto">
-        {item.itemTypeCode === 'login' && (
-          <>
-            <DetailField icon={Globe} label="网址" value={item.data.url} />
-            <DetailField icon={User} label="用户名" value={item.data.username} />
+        {/* 动态字段渲染 */}
+        {fields.map((field) => {
+          const value = (item.data as Record<string, string | undefined>)[field.name];
+          if (!value) return null;
+          return (
             <DetailField
-              icon={KeyRound}
-              label="密码"
-              value={item.data.password}
-              isPassword
+              key={field.name}
+              field={field}
+              value={value}
+              onCopy={
+                field.copyable
+                  ? (v, label) => handleCopy(v, label, field.type === 'password')
+                  : undefined
+              }
             />
-          </>
-        )}
-
-        {item.itemTypeCode === 'secure_note' && (
-          <DetailField icon={FileText} label="笔记内容" value={item.data.noteText} />
-        )}
-
-        {item.itemTypeCode === 'credit_card' && (
-          <>
-            <DetailField icon={User} label="持卡人" value={item.data.cardholder} />
-            <DetailField
-              icon={KeyRound}
-              label="卡号"
-              value={item.data.cardNumber}
-              isPassword
-            />
-            <DetailField icon={Globe} label="有效期" value={item.data.expiry} />
-            <DetailField
-              icon={KeyRound}
-              label="CVV"
-              value={item.data.cvv}
-              isPassword
-            />
-          </>
-        )}
+          );
+        })}
 
         {/* TOTP 验证码展示（T5.4） */}
         {item.data.totpSecret && (
@@ -260,29 +255,45 @@ export function ItemDetail({ itemId }: ItemDetailProps) {
           </div>
         )}
 
-        {item.data.notes && (
-          <DetailField icon={FileText} label="备注" value={item.data.notes} />
-        )}
-
         {/* 便捷操作按钮（T5.6） */}
-        {item.itemTypeCode === 'login' && (
+        {(item.data.url || item.data.website || item.data.adminConsoleUrl) && (
           <div className="flex flex-wrap gap-2 px-4 py-3">
-            {item.data.username && (
-              <Button size="sm" variant="outline" onClick={handleCopyUsername}>
-                <Copy className="h-4 w-4" />
-                复制用户名
-              </Button>
-            )}
-            {item.data.password && (
-              <Button size="sm" variant="outline" onClick={handleCopyPassword}>
-                <Copy className="h-4 w-4" />
-                复制密码
-              </Button>
-            )}
             {item.data.url && (
               <Button size="sm" variant="outline" onClick={handleOpenWebsite}>
                 <ExternalLink className="h-4 w-4" />
                 打开网站
+              </Button>
+            )}
+            {item.data.website && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  let url = item.data.website!;
+                  if (!url.startsWith('http://') && !url.startsWith('https://')) {
+                    url = `https://${url}`;
+                  }
+                  window.open(url, '_blank', 'noopener,noreferrer');
+                }}
+              >
+                <ExternalLink className="h-4 w-4" />
+                打开网站
+              </Button>
+            )}
+            {item.data.adminConsoleUrl && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  let url = item.data.adminConsoleUrl!;
+                  if (!url.startsWith('http://') && !url.startsWith('https://')) {
+                    url = `https://${url}`;
+                  }
+                  window.open(url, '_blank', 'noopener,noreferrer');
+                }}
+              >
+                <ExternalLink className="h-4 w-4" />
+                管理控制台
               </Button>
             )}
           </div>
