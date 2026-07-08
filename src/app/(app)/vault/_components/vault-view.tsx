@@ -37,7 +37,7 @@ export function VaultView() {
 
   // 加载密码库数据
   useEffect(() => {
-    if (loaded || loading || !symmetricKey) return;
+    if (loaded || loading || !symmetricKey || error) return;
 
     let cancelled = false;
     (async () => {
@@ -59,7 +59,7 @@ export function VaultView() {
     return () => {
       cancelled = true;
     };
-  }, [loaded, loading, symmetricKey, setVaultData]);
+  }, [loaded, loading, symmetricKey, setVaultData, error]);
 
   // 筛选 + 搜索（useDeferredValue 优化搜索性能 — T4.7）
   const deferredQuery = useDeferredValue(searchQuery);
@@ -109,7 +109,7 @@ export function VaultView() {
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-4 p-8 text-center">
         <p className="text-sm text-destructive">{error}</p>
-        <Button size="sm" variant="outline" onClick={() => window.location.reload()}>
+        <Button size="sm" variant="outline" onClick={() => setError(null)}>
           重试
         </Button>
       </div>
