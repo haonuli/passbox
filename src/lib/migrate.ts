@@ -21,9 +21,6 @@ import { resolve } from 'node:path';
 // ============================================================
 
 const DDL_SCRIPTS: string[] = [
-  // 启用 UUID 生成扩展
-  `CREATE EXTENSION IF NOT EXISTS "pgcrypto";`,
-
   // 1. item_types（条目类型，系统预置）
   `CREATE TABLE IF NOT EXISTS item_types (
     id          SERIAL PRIMARY KEY,
@@ -103,6 +100,14 @@ const DDL_SCRIPTS: string[] = [
     PRIMARY KEY (item_id, tag_id)
   );`,
 
+  // 7. two_fa_tickets（2FA 验证票据，替代内存 Map，适配 serverless 部署）
+  `CREATE TABLE IF NOT EXISTS two_fa_tickets (
+    ticket      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id     UUID         NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    expires_at  TIMESTAMPTZ  NOT NULL,
+    created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+  );`,
+
   // 索引
   `CREATE INDEX IF NOT EXISTS idx_vaults_user_id ON vaults (user_id);`,
   `CREATE INDEX IF NOT EXISTS idx_items_user_id ON items (user_id);`,
@@ -113,6 +118,7 @@ const DDL_SCRIPTS: string[] = [
   `CREATE INDEX IF NOT EXISTS idx_tags_user_id ON tags (user_id);`,
   `CREATE INDEX IF NOT EXISTS idx_item_tags_tag_id ON item_tags (tag_id);`,
   `CREATE INDEX IF NOT EXISTS idx_item_tags_item_id ON item_tags (item_id);`,
+  `CREATE INDEX IF NOT EXISTS idx_two_fa_tickets_expires ON two_fa_tickets (expires_at);`,
 
   // 触发器：自动更新 updated_at
   `CREATE OR REPLACE FUNCTION update_updated_at()

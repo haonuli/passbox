@@ -26,6 +26,7 @@ import { deriveAuthHash } from '@/lib/crypto/hkdf';
 import { decryptSymmetricKey } from '@/lib/crypto/keys';
 import { fromBase64, toBase64, zeroFill } from '@/lib/crypto/encoding';
 import { useAuthStore } from '@/stores/auth-store';
+import { useVaultStore } from '@/stores/vault-store';
 import type {
   LoginRequest,
   LoginResponse,
@@ -162,8 +163,10 @@ export function useLogin(): UseLoginReturn {
       const data: LoginResponse = await loginRes.json();
       const symmetricKey = await decryptSymmetricKey(masterKey, data.encryptedKey);
 
-      // 6. 更新 auth-store：authenticated → unlocked
+      // 6. 更新 auth-store：authenticated -> unlocked
       // masterKey 所有权转移给 store，store 负责 lock/logout 时零填充
+      // 清空旧用户的 vault-store 数据，防止跨用户数据残留
+      useVaultStore.getState().clear();
       useAuthStore
         .getState()
         .setAuthenticated(data.user, data.encryptedKey, data.kdfSalt, data.kdfParams);
@@ -200,7 +203,9 @@ export function useLogin(): UseLoginReturn {
       // 解密 Symmetric Key
       const symmetricKey = await decryptSymmetricKey(masterKey, response.encryptedKey);
 
-      // 更新 auth-store：authenticated → unlocked
+      // 更新 auth-store：authenticated -> unlocked
+      // 清空旧用户的 vault-store 数据，防止跨用户数据残留
+      useVaultStore.getState().clear();
       useAuthStore
         .getState()
         .setAuthenticated(response.user, response.encryptedKey, response.kdfSalt, response.kdfParams);

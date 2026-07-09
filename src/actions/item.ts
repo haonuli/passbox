@@ -46,11 +46,12 @@ export async function createItem(input: CreateItemInput): Promise<ActionResult<I
       await client.query('BEGIN');
 
       const result = await client.query<ItemRow>(
-        `INSERT INTO items (user_id, vault_id, item_type_id, title_encrypted, data_encrypted)
-         VALUES ($1, $2, $3, $4, $5)
+        `INSERT INTO items (id, user_id, vault_id, item_type_id, title_encrypted, data_encrypted)
+         VALUES ($1, $2, $3, $4, $5, $6)
          RETURNING id, user_id, vault_id, item_type_id, title_encrypted, data_encrypted,
                    is_favorite, created_at, updated_at`,
         [
+          input.itemId,
           userId,
           input.vaultId,
           input.itemTypeId,

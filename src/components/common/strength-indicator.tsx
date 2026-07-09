@@ -37,6 +37,8 @@ export function StrengthIndicator({ password, showSuggestions = true }: Strength
     let cancelled = false;
     assessPassword(password).then((r) => {
       if (!cancelled) setResult(r);
+    }).catch(() => {
+      // zxcvbn-ts 加载或评估失败时静默处理，不影响表单提交
     });
     return () => { cancelled = true; };
   }, [password]);

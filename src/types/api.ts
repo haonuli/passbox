@@ -228,6 +228,8 @@ export interface VaultData {
  * @see TECHNICAL_DESIGN.md 5.3
  */
 export interface CreateItemInput {
+  /** 客户端预生成的 itemId（UUID），用于 AAD 绑定一致性 */
+  itemId: string;
   vaultId: string;
   itemTypeId: number;
   titleEncrypted: EncryptedData;

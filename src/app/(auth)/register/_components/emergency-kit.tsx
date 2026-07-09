@@ -29,13 +29,35 @@ export function EmergencyKit({ email, recoveryCode, registeredAt }: EmergencyKit
 
   const handleCopy = useCallback(async () => {
     try {
-      await navigator.clipboard.writeText(recoveryCode);
-      setCopied(true);
-      toast.success('恢复码已复制到剪贴板');
-      setTimeout(() => setCopied(false), 2000);
+      // 优先使用 Clipboard API，失败则降级到 execCommand（兼容 Trae 内置浏览器等非标准环境）
+      if (navigator.clipboard?.writeText) {
+        try {
+          await navigator.clipboard.writeText(recoveryCode);
+        } catch {
+          throw new Error('clipboard API unavailable');
+        }
+      } else {
+        throw new Error('clipboard API unavailable');
+      }
     } catch {
-      toast.error('复制失败，请手动选择文本复制');
+      // 降级方案：临时 textarea + execCommand
+      try {
+        const textarea = document.createElement('textarea');
+        textarea.value = recoveryCode;
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+      } catch {
+        toast.error('复制失败，请手动选择文本复制');
+        return;
+      }
     }
+    setCopied(true);
+    toast.success('恢复码已复制到剪贴板');
+    setTimeout(() => setCopied(false), 2000);
   }, [recoveryCode]);
 
   const handleDownload = useCallback(() => {

@@ -170,7 +170,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     // 2FA 检查（T6.2）：用户开启了 2FA 时，不直接签发会话，
     // 而是返回 202 + ticket，客户端需完成 TOTP 验证才能登录。
     if (user.two_factor_enabled) {
-      const ticket = createTicket(user.id as string);
+      const ticket = await createTicket(user.id as string);
       const challenge: TotpChallengeResponse = {
         challenge: 'totp_required',
         ticket,

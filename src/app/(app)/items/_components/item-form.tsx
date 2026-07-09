@@ -177,6 +177,16 @@ export function ItemForm({ mode, itemId }: ItemFormProps) {
     }
   }, [mode, existingItem, reset, currentConfig]);
 
+  // vaults 异步加载后，若 vaultId 为空或不匹配，自动选中第一个保险库
+  useEffect(() => {
+    if (vaults.length === 0) return;
+    const exists = vaults.some((v) => v.id === vaultId);
+    if (!exists) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setVaultId(vaults[0].id);
+    }
+  }, [vaults, vaultId]);
+
   /** 根据条目类型构建 payload */
   const buildPayload = useCallback((values: FormValues): ItemData => {
     const payload: Record<string, string> = {};
@@ -224,6 +234,7 @@ export function ItemForm({ mode, itemId }: ItemFormProps) {
 
         if (mode === 'create') {
           const result = await createItem({
+            itemId: targetItemId,
             vaultId: targetVaultId,
             itemTypeId,
             titleEncrypted,

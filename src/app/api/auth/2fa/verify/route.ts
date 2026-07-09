@@ -65,7 +65,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const { ticket, code, useBackupCode } = parsed.data;
 
     // 1. 验证 ticket，获取 userId
-    const userId = verifyTicket(ticket);
+    const userId = await verifyTicket(ticket);
     if (!userId) {
       return NextResponse.json(
         { error: '验证会话已过期，请重新登录', code: 'TICKET_EXPIRED' },
@@ -84,7 +84,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
     if (result.rows.length === 0) {
       // ticket 有效但用户不存在（边缘情况，理论不会发生）
-      consumeTicket(ticket);
+      await consumeTicket(ticket);
       return NextResponse.json(
         { error: '验证码错误', code: 'INVALID_CODE' },
         { status: 401 },
@@ -158,7 +158,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
 
     // 4. 验证成功：消耗 ticket（防止重放）+ 签发会话
-    consumeTicket(ticket);
+    await consumeTicket(ticket);
 
     const token = await createSession(
       user.id as string,

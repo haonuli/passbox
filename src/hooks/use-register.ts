@@ -29,6 +29,7 @@ import { encrypt } from '@/lib/crypto/aes';
 import { toBase64, zeroFill } from '@/lib/crypto/encoding';
 import { generateRecoveryCode } from '@/lib/recovery-code';
 import { useAuthStore } from '@/stores/auth-store';
+import { useVaultStore } from '@/stores/vault-store';
 import type { RegisterRequest, RegisterResponse } from '@/types/api';
 
 /** 注册流程状态 */
@@ -94,7 +95,7 @@ export function useRegister(): UseRegisterReturn {
       const recoveryEncryptedKey = await encryptSymmetricKeyWithRecovery(recoveryKey, symmetricKey);
 
       // 9. 用 Symmetric Key 加密默认保险库名称
-      const defaultVaultNameEncrypted = await encrypt(symmetricKey, DEFAULT_VAULT_NAME);
+      const defaultVaultNameEncrypted = await encrypt(symmetricKey, DEFAULT_VAULT_NAME, 'passbox:vault-name:v1');
 
       // 10. 构造注册请求（全部为密文 / 哈希，无明文密码）
       const requestBody: RegisterRequest = {
@@ -123,9 +124,11 @@ export function useRegister(): UseRegisterReturn {
         throw new Error(data.error ?? '注册失败，请稍后重试');
       }
 
-      // 12. 更新 auth-store：authenticated → unlocked
+      // 12. 更新 auth-store：authenticated -> unlocked
       // masterKey 所有权转移给 store，store 负责 lock/logout 时零填充
       const kdfSaltBase64 = toBase64(kdfSalt);
+      // 清空旧用户的 vault-store 数据，防止跨用户数据残留
+      useVaultStore.getState().clear();
       useAuthStore
         .getState()
         .setAuthenticated(data.user, encryptedKey, kdfSaltBase64, DEFAULT_KDF_PARAMS);

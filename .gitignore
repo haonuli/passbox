@@ -35,6 +35,17 @@ yarn-error.log*
 .env*
 !.env.example
 
+# media docs (internal video scripts, not for public repo)
+/media-docs/
+
+# slides (internal presentation HTML, not for public repo)
+/public/slides/
+
+# AI workflow docs (internal, not for public repo)
+/AGENTS.md
+/CLAUDE.md
+/TASK_TRACKING.md
+
 # vercel
 .vercel
 
