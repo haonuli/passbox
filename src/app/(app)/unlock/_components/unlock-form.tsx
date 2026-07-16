@@ -41,6 +41,7 @@ export function UnlockForm() {
 
   const form = useForm<UnlockFormValues>({
     resolver: zodResolver(unlockSchema),
+    mode: 'onBlur',
     defaultValues: { masterPassword: '' },
   });
 

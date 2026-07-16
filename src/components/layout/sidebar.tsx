@@ -55,7 +55,7 @@ export function Sidebar({ mobileOpen, onClose }: SidebarProps) {
       >
         {/* 品牌标识 */}
         <div className="flex h-14 items-center border-b border-border px-6">
-          <span className="text-base font-semibold tracking-tight">passbox</span>
+          <span className="text-base font-semibold tracking-tight">PassBox</span>
         </div>
 
         {/* 导航 */}

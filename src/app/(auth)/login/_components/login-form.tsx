@@ -7,15 +7,16 @@
  */
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Loader2, Eye, EyeOff } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { PasswordInput } from '@/components/password-input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import {
   Form,
@@ -27,28 +28,25 @@ import {
 } from '@/components/ui/form';
 import { useLogin } from '@/hooks/use-login';
 import { getSafeRedirect } from '@/lib/redirect';
+import { emailSchema, loginPasswordSchema } from '@/lib/validations';
 import { TotpChallenge } from './totp-challenge';
 
-/** 登录表单校验 schema（主密码仅需非空，强度校验在注册阶段完成） */
+/** 登录表单校验 schema */
 const loginSchema = z.object({
-  email: z
-    .string()
-    .trim()
-    .min(1, '请输入邮箱地址')
-    .email('请输入有效的邮箱地址'),
-  masterPassword: z.string().min(1, '请输入主密码'),
+  email: emailSchema,
+  masterPassword: loginPasswordSchema,
 });
 
 type LoginFormValues = z.infer<typeof loginSchema>;
 
 export function LoginForm() {
   const { status, error, login, totpChallenge, completeTotpChallenge } = useLogin();
-  const [showPassword, setShowPassword] = useState(false);
   const router = useRouter();
   const searchParams = useSearchParams();
 
   const form = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
+    mode: 'onBlur',
     defaultValues: {
       email: '',
       masterPassword: '',
@@ -91,7 +89,7 @@ export function LoginForm() {
   return (
     <Card className="mx-auto w-full max-w-md">
       <CardHeader className="space-y-2 text-center">
-        <CardTitle className="text-2xl">登录 passbox</CardTitle>
+        <CardTitle className="text-2xl">登录 PassBox</CardTitle>
         <CardDescription>
           零知识加密 · 您的主密码永远不会上传服务器
         </CardDescription>
@@ -128,25 +126,12 @@ export function LoginForm() {
                 <FormItem>
                   <FormLabel>主密码</FormLabel>
                   <FormControl>
-                    <div className="relative">
-                      <Input
-                        type={showPassword ? 'text' : 'password'}
-                        placeholder="输入主密码"
-                        autoComplete="current-password"
-                        disabled={isProcessing}
-                        className="pr-10"
-                        {...field}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowPassword(!showPassword)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                        tabIndex={-1}
-                        aria-label={showPassword ? '隐藏密码' : '显示密码'}
-                      >
-                        {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                      </button>
-                    </div>
+                    <PasswordInput
+                      placeholder="输入主密码"
+                      autoComplete="current-password"
+                      disabled={isProcessing}
+                      {...field}
+                    />
                   </FormControl>
                   <FormMessage />
                 </FormItem>

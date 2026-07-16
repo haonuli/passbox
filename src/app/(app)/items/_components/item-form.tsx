@@ -32,6 +32,7 @@ import { useVaultStore } from '@/stores/vault-store';
 import { createItem, updateItem } from '@/actions/item';
 import { encrypt } from '@/lib/crypto/aes';
 import { ITEM_TYPE_CONFIGS, type FieldConfig, type ItemTypeConfig } from '@/lib/item-types';
+import { getFieldSchema } from '@/lib/validations';
 import type { EncryptedData } from '@/types/crypto';
 import type { DecryptedItem, ItemData } from '@/types/vault';
 import { cn } from '@/lib/utils';
@@ -39,14 +40,20 @@ import { cn } from '@/lib/utils';
 /** 所有可能的表单值（title + 所有字段） */
 type FormValues = Record<string, string> & { title: string };
 
-/** 从字段配置生成 zod schema */
+/** 从字段配置生成 zod schema（集成类型化验证规则） */
 function buildSchema(config: ItemTypeConfig): z.ZodType<FormValues> {
   const shape: Record<string, z.ZodTypeAny> = {
     title: z.string().min(1, '请输入标题').max(200, '标题不能超过 200 字'),
   };
   for (const field of config.fields) {
-    const maxLen = field.maxLength ?? (field.type === 'textarea' ? 10000 : 500);
-    shape[field.name] = z.string().max(maxLen).optional().or(z.literal(''));
+    // 优先使用字段名匹配的类型化验证规则（URL/邮箱/IP/端口等）
+    const fieldSchema = getFieldSchema(field.name);
+    if (fieldSchema) {
+      shape[field.name] = fieldSchema;
+    } else {
+      const maxLen = field.maxLength ?? (field.type === 'textarea' ? 10000 : 500);
+      shape[field.name] = z.string().max(maxLen).optional().or(z.literal(''));
+    }
   }
   return z.object(shape) as unknown as z.ZodType<FormValues>;
 }
@@ -155,6 +162,7 @@ export function ItemForm({ mode, itemId }: ItemFormProps) {
     formState: { errors },
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
+    mode: 'onBlur',
     defaultValues: useMemo(() => {
       const defaults: Record<string, string> = { title: '' };
       for (const f of currentConfig.fields) {
@@ -257,7 +265,7 @@ export function ItemForm({ mode, itemId }: ItemFormProps) {
             };
             upsertItem(newItem);
             toast.success('已保存');
-            router.push(`/items/${result.data.id}`);
+            router.push(`/vault?itemId=${result.data.id}`);
           } else {
             toast.error(result.error);
           }
@@ -278,7 +286,7 @@ export function ItemForm({ mode, itemId }: ItemFormProps) {
             };
             upsertItem(updatedItem);
             toast.success('已保存');
-            router.push(`/items/${targetItemId}`);
+            router.push(`/vault?itemId=${targetItemId}`);
           } else if (!result.ok) {
             toast.error(result.error);
           }

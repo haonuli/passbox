@@ -13,9 +13,12 @@ import type { NextRequest } from 'next/server'
 export function middleware(request: NextRequest) {
   const nonce = Buffer.from(crypto.randomUUID()).toString('base64')
 
+  // 开发模式下 React 需要 'unsafe-eval' 来重建调用栈等调试功能
+  const isDev = process.env.NODE_ENV === 'development'
+
   const csp = [
     "default-src 'self'",
-    `script-src 'self' 'nonce-${nonce}' 'wasm-unsafe-eval'`,
+    `script-src 'self' 'nonce-${nonce}' 'wasm-unsafe-eval'${isDev ? " 'unsafe-eval'" : ''}`,
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: https:",
     "connect-src 'self' https://api.pwnedpasswords.com",

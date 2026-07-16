@@ -1,39 +1,50 @@
 /**
  * 密码库主视图 (T4.4 / T4.7)
  *
- * 客户端组件，负责：
- * 1. 加载密码库密文（getVaultData Server Action）
- * 2. 用 Symmetric Key 解密并缓存到 vault-store
- * 3. 虚拟滚动列表展示条目
- * 4. 支持"全部"和"收藏"筛选视图
- * 5. 本地搜索（T4.7，使用 useDeferredValue 优化）
- * 6. 空密码库引导状态
+ * 三栏联动布局：
+ * - 中栏：条目列表（虚拟滚动 + 筛选 + 搜索）
+ * - 右栏：选中条目的详情面板
  *
- * @see TASK_BREAKDOWN T4.4 / T4.7 验收标准
+ * 点击列表项 -> 右侧详情面板同步更新，不跳转页面。
+ * 移动端：列表/详情切换显示。
  */
 'use client';
 
 import { useEffect, useState, useMemo, useRef, useDeferredValue } from 'react';
-import { useRouter } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { Loader2, Plus, Vault as VaultIcon, SearchX } from 'lucide-react';
+import { Plus, Vault as VaultIcon, SearchX } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuthStore } from '@/stores/auth-store';
 import { useVaultStore } from '@/stores/vault-store';
 import { getVaultData } from '@/actions/vault';
 import { ItemRow } from './item-row';
 import { VaultToolbar, type FilterType } from './vault-toolbar';
+import { ItemDetailPanel } from './item-detail-panel';
+import { VaultSkeleton } from './vault-skeleton';
 
 const ROW_HEIGHT = 56;
 
 export function VaultView() {
-  const router = useRouter();
+  const searchParams = useSearchParams();
   const symmetricKey = useAuthStore((s) => s.symmetricKey);
   const { items, loaded, loading, setVaultData, searchQuery } = useVaultStore();
 
   const [filter, setFilter] = useState<FilterType>('all');
   const [error, setError] = useState<string | null>(null);
+  const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  // 从 URL 参数恢复选中项（支持深链接）
+  useEffect(() => {
+    const itemId = searchParams.get('itemId');
+    if (itemId && loaded) {
+      const exists = items.some((i) => i.id === itemId);
+      if (exists) {
+        setSelectedItemId(itemId);
+      }
+    }
+  }, [searchParams, items, loaded]);
 
   // 加载密码库数据
   useEffect(() => {
@@ -61,17 +72,15 @@ export function VaultView() {
     };
   }, [loaded, loading, symmetricKey, setVaultData, error]);
 
-  // 筛选 + 搜索（useDeferredValue 优化搜索性能 — T4.7）
+  // 筛选 + 搜索
   const deferredQuery = useDeferredValue(searchQuery);
   const filteredItems = useMemo(() => {
     let result = items;
 
-    // 收藏筛选
     if (filter === 'favorites') {
       result = result.filter((i) => i.isFavorite);
     }
 
-    // 搜索筛选（匹配标题、用户名、URL）
     const query = deferredQuery.trim().toLowerCase();
     if (query) {
       result = result.filter(
@@ -95,11 +104,22 @@ export function VaultView() {
     overscan: 10,
   });
 
-  // 加载中
+  const handleSelectItem = (itemId: string) => {
+    setSelectedItemId(itemId);
+  };
+
+  const handleBackToList = () => {
+    setSelectedItemId(null);
+  };
+
+  // 加载中（骨架屏）
   if (loading || (!loaded && !error)) {
     return (
-      <div className="flex flex-1 items-center justify-center">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      <div className="flex h-full overflow-hidden">
+        <div className="flex w-full flex-col md:w-[360px] md:shrink-0 md:border-r md:border-border">
+          <VaultSkeleton />
+        </div>
+        <div className="hidden md:flex flex-1 flex-col" />
       </div>
     );
   }
@@ -125,7 +145,7 @@ export function VaultView() {
           <h2 className="text-lg font-semibold">密码库为空</h2>
           <p className="mt-1 text-sm text-muted-foreground">添加你的第一个密码条目</p>
         </div>
-        <Button onClick={() => router.push('/items/new')}>
+        <Button onClick={() => (window.location.href = '/items/new')}>
           <Plus className="mr-1.5 h-4 w-4" />
           添加密码
         </Button>
@@ -133,52 +153,68 @@ export function VaultView() {
     );
   }
 
-  // 正常列表
+  // 三栏布局：列表 + 详情
   return (
-    <div className="flex h-full flex-col">
-      <VaultToolbar
-        filter={filter}
-        onFilterChange={setFilter}
-        totalCount={items.length}
-        favoritesCount={favoritesCount}
-      />
-      <div ref={scrollRef} className="flex-1 overflow-auto">
-        {filteredItems.length === 0 ? (
-          <div className="flex h-full flex-col items-center justify-center gap-2 p-8 text-center">
-            <SearchX className="h-8 w-8 text-muted-foreground" />
-            <p className="text-sm text-muted-foreground">
-              {deferredQuery
-                ? `没有匹配「${deferredQuery}」的条目`
-                : filter === 'favorites'
-                  ? '还没有收藏的条目'
-                  : '没有匹配的条目'}
-            </p>
-          </div>
-        ) : (
-          <div
-            style={{ height: `${virtualizer.getTotalSize()}px`, position: 'relative' }}
-          >
-            {virtualizer.getVirtualItems().map((virtualItem) => {
-              const item = filteredItems[virtualItem.index];
-              if (!item) return null;
-              return (
-                <div
-                  key={item.id}
-                  style={{
-                    position: 'absolute',
-                    top: 0,
-                    left: 0,
-                    width: '100%',
-                    height: `${virtualItem.size}px`,
-                    transform: `translateY(${virtualItem.start}px)`,
-                  }}
-                >
-                  <ItemRow item={item} />
-                </div>
-              );
-            })}
-          </div>
-        )}
+    <div className="flex h-full overflow-hidden">
+      {/* 中栏：条目列表 */}
+      <div
+        className={`flex flex-col ${selectedItemId ? 'hidden md:flex' : 'flex'} w-full md:w-[360px] md:shrink-0 md:border-r md:border-border`}
+      >
+        <VaultToolbar
+          filter={filter}
+          onFilterChange={setFilter}
+          totalCount={items.length}
+          favoritesCount={favoritesCount}
+        />
+        <div ref={scrollRef} className="flex-1 overflow-auto">
+          {filteredItems.length === 0 ? (
+            <div className="flex h-full flex-col items-center justify-center gap-2 p-8 text-center">
+              <SearchX className="h-8 w-8 text-muted-foreground" />
+              <p className="text-sm text-muted-foreground">
+                {deferredQuery
+                  ? `没有匹配「${deferredQuery}」的条目`
+                  : filter === 'favorites'
+                    ? '还没有收藏的条目'
+                    : '没有匹配的条目'}
+              </p>
+            </div>
+          ) : (
+            <div
+              style={{ height: `${virtualizer.getTotalSize()}px`, position: 'relative' }}
+            >
+              {virtualizer.getVirtualItems().map((virtualItem) => {
+                const item = filteredItems[virtualItem.index];
+                if (!item) return null;
+                return (
+                  <div
+                    key={item.id}
+                    style={{
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      width: '100%',
+                      height: `${virtualItem.size}px`,
+                      transform: `translateY(${virtualItem.start}px)`,
+                    }}
+                  >
+                    <ItemRow
+                      item={item}
+                      isSelected={selectedItemId === item.id}
+                      onSelect={handleSelectItem}
+                    />
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* 右栏：详情面板 */}
+      <div
+        className={`${selectedItemId ? 'flex' : 'hidden md:flex'} flex-1 flex-col`}
+      >
+        <ItemDetailPanel itemId={selectedItemId} onBack={handleBackToList} />
       </div>
     </div>
   );

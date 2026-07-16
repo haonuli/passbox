@@ -95,7 +95,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
     // 构建 TOTP 对象验证验证码（窗口 ±1）
     const totp = new TOTP({
-      issuer: 'passbox',
+      issuer: 'PassBox',
       label: session.email,
       secret: Secret.fromBase32(secret),
       digits: 6,

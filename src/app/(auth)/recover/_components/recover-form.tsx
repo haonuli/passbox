@@ -16,24 +16,15 @@ import { Input } from '@/components/ui/input';
 import { PasswordInput } from '@/components/password-input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
-import { isValidRecoveryCodeFormat } from '@/lib/recovery-code';
+import { emailSchema, passwordSchema, recoveryCodeSchema } from '@/lib/validations';
 import { useRecover } from '@/hooks/use-recover';
 import { RecoveryCodeDisplay } from './recovery-code-display';
 
 const recoverSchema = z
   .object({
-    email: z.string().trim().min(1, '请输入邮箱地址').email('请输入有效的邮箱地址'),
-    recoveryCode: z
-      .string()
-      .trim()
-      .min(1, '请输入恢复码')
-      .refine(isValidRecoveryCodeFormat, '恢复码格式应为 PBOX-XXXX-XXXX-XXXX-XXXX'),
-    newMasterPassword: z
-      .string()
-      .min(12, '主密码至少 12 位')
-      .regex(/[a-z]/, '需包含小写字母')
-      .regex(/[A-Z]/, '需包含大写字母')
-      .regex(/\d/, '需包含数字'),
+    email: emailSchema,
+    recoveryCode: recoveryCodeSchema,
+    newMasterPassword: passwordSchema,
     confirmPassword: z.string().min(1, '请再次输入新主密码'),
   })
   .refine((data) => data.newMasterPassword === data.confirmPassword, {
@@ -47,6 +38,7 @@ export function RecoverForm() {
   const { status, error, newRecoveryCode, recover } = useRecover();
   const form = useForm<RecoverFormValues>({
     resolver: zodResolver(recoverSchema),
+    mode: 'onBlur',
     defaultValues: { email: '', recoveryCode: '', newMasterPassword: '', confirmPassword: '' },
   });
 

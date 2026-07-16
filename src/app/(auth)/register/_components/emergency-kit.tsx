@@ -67,7 +67,7 @@ export function EmergencyKit({ email, recoveryCode, registeredAt }: EmergencyKit
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `passbox-emergency-kit-${new Date().toISOString().slice(0, 10)}.html`;
+    a.download = `PassBox-emergency-kit-${new Date().toISOString().slice(0, 10)}.html`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -190,7 +190,7 @@ function generateEmergencyKitHtml(email: string, recoveryCode: string, date: str
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>passbox Emergency Kit</title>
+<title>PassBox Emergency Kit</title>
 <style>
   body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; max-width: 600px; margin: 40px auto; padding: 0 20px; color: #1a1a1a; }
   h1 { color: #6366f1; border-bottom: 2px solid #6366f1; padding-bottom: 10px; }
@@ -205,7 +205,7 @@ function generateEmergencyKitHtml(email: string, recoveryCode: string, date: str
 </style>
 </head>
 <body>
-<h1>passbox Emergency Kit</h1>
+<h1>PassBox Emergency Kit</h1>
 <p>请妥善保管此文件。它是您忘记主密码后找回数据的唯一途径。</p>
 <div class="code">${recoveryCode}</div>
 <div class="info">
@@ -222,7 +222,7 @@ function generateEmergencyKitHtml(email: string, recoveryCode: string, date: str
   </ul>
 </div>
 <div class="footer">
-  passbox · 零知识密码管理器 · ${date}
+  PassBox · 零知识密码管理器 · ${date}
 </div>
 </body>
 </html>`;

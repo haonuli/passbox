@@ -17,7 +17,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "passbox - 零知识密码管理器",
+  title: "PassBox - 零知识密码管理器",
   description: "端到端加密的个人密码管理器，只有你能解密自己的数据。",
 };
 

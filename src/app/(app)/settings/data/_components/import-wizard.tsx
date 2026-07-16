@@ -54,11 +54,6 @@ export function ImportWizard() {
   const vaults = useVaultStore((s) => s.vaults);
   const symmetricKey = useAuthStore((s) => s.symmetricKey);
 
-  const stepIndex = STEP_LABELS.findIndex((_, i) => {
-    const steps: Step[] = ['format', 'upload', 'mapping', 'preview', 'importing', 'result'];
-    return steps[i] === step;
-  });
-
   const handleFormatSelect = (format: ImportFormat) => {
     setSelectedFormat(format);
     setStep('upload');
@@ -85,7 +80,7 @@ export function ImportWizard() {
   );
 
   const handleFile = useCallback(
-    async (content: string | ArrayBuffer, _fileName: string) => {
+    async (content: string | ArrayBuffer) => {
       if (!selectedFormat) return;
       try {
         if (selectedFormat === 'generic-csv') {

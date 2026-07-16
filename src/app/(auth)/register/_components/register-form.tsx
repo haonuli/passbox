@@ -19,6 +19,7 @@ import { PasswordInput } from '@/components/password-input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { useRegister } from '@/hooks/use-register';
+import { emailSchema, passwordSchema } from '@/lib/validations';
 import { EmergencyKit } from './emergency-kit';
 
 // zxcvbn-ts 在 SSR 时会尝试读取文件系统中的字典文件导致 500 错误，
@@ -31,13 +32,8 @@ const StrengthIndicator = dynamic(
 /** 注册表单校验 schema */
 const registerSchema = z
   .object({
-    email: z.string().trim().min(1, '请输入邮箱地址').email('请输入有效的邮箱地址'),
-    masterPassword: z
-      .string()
-      .min(12, '主密码至少 12 位')
-      .regex(/[a-z]/, '需包含小写字母')
-      .regex(/[A-Z]/, '需包含大写字母')
-      .regex(/\d/, '需包含数字'),
+    email: emailSchema,
+    masterPassword: passwordSchema,
     confirmPassword: z.string().min(1, '请再次输入主密码'),
   })
   .refine((data) => data.masterPassword === data.confirmPassword, {
@@ -51,6 +47,7 @@ export function RegisterForm() {
   const { status, error, recoveryCode, user, register } = useRegister();
   const form = useForm<RegisterFormValues>({
     resolver: zodResolver(registerSchema),
+    mode: 'onBlur',
     defaultValues: { email: '', masterPassword: '', confirmPassword: '' },
   });
 
@@ -69,7 +66,7 @@ export function RegisterForm() {
   return (
     <Card className="mx-auto w-full max-w-md">
       <CardHeader className="space-y-2 text-center">
-        <CardTitle className="text-2xl">创建 passbox 账户</CardTitle>
+        <CardTitle className="text-2xl">创建 PassBox 账户</CardTitle>
         <CardDescription>零知识加密 · 您的主密码永远不会上传服务器</CardDescription>
       </CardHeader>
       <CardContent>

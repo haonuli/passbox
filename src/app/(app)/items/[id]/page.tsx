@@ -1,9 +1,9 @@
 /**
  * 条目详情页 (T4.5)
  *
- * Server Component 壳，从路由参数提取 itemId 传给客户端组件。
+ * 重定向到密码库三栏布局，通过 itemId 参数选中对应条目。
  */
-import { ItemDetail } from './_components/item-detail';
+import { redirect } from 'next/navigation';
 
 export default async function ItemDetailPage({
   params,
@@ -11,5 +11,5 @@ export default async function ItemDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  return <ItemDetail itemId={id} />;
+  redirect(`/vault?itemId=${id}`);
 }

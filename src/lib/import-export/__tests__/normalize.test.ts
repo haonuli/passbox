@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { detectDuplicates, getItemTypeIdByCode } from '../normalize';
-import type { ImportItem, DuplicateMatch } from '../types';
+import type { ImportItem } from '../types';
 import type { DecryptedItem } from '@/types/vault';
 
 /** 构造测试用 ImportItem */

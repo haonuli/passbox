@@ -47,9 +47,9 @@ export async function POST(): Promise<NextResponse> {
     // 生成 32 字节随机 TOTP 密钥
     const secret = new Secret({ size: 32 });
 
-    // 构建 TOTP 对象（issuer: passbox, label: 用户邮箱）
+    // 构建 TOTP 对象（issuer: PassBox, label: 用户邮箱）
     const totp = new TOTP({
-      issuer: 'passbox',
+      issuer: 'PassBox',
       label: email,
       secret,
       digits: 6,
