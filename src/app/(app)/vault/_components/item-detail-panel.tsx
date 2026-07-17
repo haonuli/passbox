@@ -16,6 +16,7 @@ import {
   Pencil,
   Trash2,
   Star,
+  Share2,
   Copy,
   ExternalLink,
   Loader2,
@@ -37,6 +38,7 @@ import { deleteItem, toggleFavorite } from '@/actions/item';
 import { useClipboard } from '@/hooks/use-clipboard';
 import { TotpDisplay } from '@/components/item/totp-display';
 import { getItemTypeConfigByCode, getFieldIcon, type FieldConfig } from '@/lib/item-types';
+import { ShareDialog } from '@/app/(app)/settings/shares/_components/share-dialog';
 
 interface ItemDetailPanelProps {
   itemId: string | null;
@@ -118,6 +120,7 @@ export function ItemDetailPanel({ itemId, onBack }: ItemDetailPanelProps) {
   const updateFavorite = useVaultStore((s) => s.updateFavorite);
   const [deleting, setDeleting] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const { copy } = useClipboard();
   const clipboardClearSeconds = useSettingsStore((s) => s.clipboardClearSeconds);
 
@@ -224,6 +227,14 @@ export function ItemDetailPanel({ itemId, onBack }: ItemDetailPanelProps) {
         <Button
           size="sm"
           variant="ghost"
+          onClick={() => setShareDialogOpen(true)}
+        >
+          <Share2 className="h-4 w-4" />
+          <span className="ml-1.5 hidden sm:inline">分享</span>
+        </Button>
+        <Button
+          size="sm"
+          variant="ghost"
           onClick={() => router.push(`/items/${item.id}/edit`)}
         >
           <Pencil className="h-4 w-4" />
@@ -293,6 +304,13 @@ export function ItemDetailPanel({ itemId, onBack }: ItemDetailPanelProps) {
           <div>修改时间：{new Date(item.updatedAt).toLocaleString('zh-CN')}</div>
         </div>
       </div>
+
+      {/* 分享弹窗 */}
+      <ShareDialog
+        item={item}
+        open={shareDialogOpen}
+        onOpenChange={setShareDialogOpen}
+      />
 
       {/* 删除确认弹窗 */}
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
