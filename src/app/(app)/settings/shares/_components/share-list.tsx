@@ -6,7 +6,7 @@
  */
 'use client';
 
-import { useCallback, useEffect, useState, createElement } from 'react';
+import { useEffect, useState } from 'react';
 import { Share2, Trash2, Loader2, Lock } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -59,26 +59,24 @@ export function ShareList() {
   const [revokingId, setRevokingId] = useState<string | null>(null);
   const [confirmId, setConfirmId] = useState<string | null>(null);
 
-  const fetchList = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await fetch('/api/share');
-      if (!res.ok) {
-        toast.error('加载共享列表失败');
-        return;
-      }
-      const data = (await res.json()) as ShareListItem[];
-      setItems(data);
-    } catch {
-      toast.error('加载共享列表失败');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
   useEffect(() => {
-    fetchList();
-  }, [fetchList]);
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const res = await fetch('/api/share');
+        if (!res.ok) return;
+        const data = (await res.json()) as ShareListItem[];
+        if (!cancelled) {
+          setItems(data);
+          setLoading(false);
+        }
+      } catch {
+        if (!cancelled) setLoading(false);
+      }
+    };
+    load();
+    return () => { cancelled = true; };
+  }, []);
 
   const handleRevoke = async (id: string) => {
     setRevokingId(id);

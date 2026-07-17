@@ -18,7 +18,6 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
 import { decryptShareData } from '@/lib/share/crypto';
 import {
   getItemTypeConfigByCode,
@@ -56,7 +55,6 @@ function extractKeyFromHash(): string | null {
 function ShareFieldRow({ field, value }: { field: FieldConfig; value: string }) {
   const [show, setShow] = useState(false);
   const isPassword = field.type === 'password';
-  const Icon = getFieldIcon(field.name);
 
   const handleCopy = async () => {
     try {
@@ -69,7 +67,7 @@ function ShareFieldRow({ field, value }: { field: FieldConfig; value: string }) 
 
   return (
     <div className="flex items-start gap-3 border-b border-border px-4 py-3 last:border-0">
-      <Icon className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+      {createElement(getFieldIcon(field.name), { className: 'mt-0.5 h-4 w-4 shrink-0 text-muted-foreground' })}
       <div className="min-w-0 flex-1">
         <div className="text-xs text-muted-foreground">{field.label}</div>
         <div className="mt-0.5 break-all text-sm font-medium">
@@ -131,7 +129,6 @@ export function ShareViewClient({ shareId }: ShareViewClientProps) {
           itemTypeCode: string;
         };
 
-        const title = await decryptShareData(key, data.encryptedTitle);
         const jsonStr = await decryptShareData(key, data.encryptedData);
         const parsed = JSON.parse(jsonStr) as {
           title: string;
@@ -225,14 +222,14 @@ export function ShareViewClient({ shareId }: ShareViewClientProps) {
     );
   }
 
-  const TypeIcon = typeConfig?.icon ?? Lock;
+  const typeIcon = typeConfig?.icon ?? Lock;
   const fields = typeConfig?.fields ?? [];
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-muted/30 p-4">
       <Card className="w-full max-w-md">
         <CardHeader className="flex-row items-center gap-3 space-y-0">
-          <TypeIcon className="h-6 w-6 shrink-0 text-primary" />
+          {createElement(typeIcon, { className: 'h-6 w-6 shrink-0 text-primary' })}
           <div className="min-w-0 flex-1">
             <h1 className="truncate text-base font-semibold">{state.title}</h1>
             <p className="text-xs text-muted-foreground">{typeConfig?.name ?? '条目'}</p>
