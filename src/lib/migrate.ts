@@ -108,6 +108,19 @@ const DDL_SCRIPTS: string[] = [
     created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
   );`,
 
+  // 8. shared_items（安全共享链接）
+  `CREATE TABLE IF NOT EXISTS shared_items (
+    id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id               TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    item_title_encrypted  TEXT NOT NULL,
+    item_data_encrypted   TEXT NOT NULL,
+    item_type_code        TEXT NOT NULL,
+    expires_at            TIMESTAMPTZ NOT NULL,
+    max_views             INTEGER,
+    view_count            INTEGER NOT NULL DEFAULT 0,
+    created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  );`,
+
   // 索引
   `CREATE INDEX IF NOT EXISTS idx_vaults_user_id ON vaults (user_id);`,
   `CREATE INDEX IF NOT EXISTS idx_items_user_id ON items (user_id);`,
@@ -119,6 +132,8 @@ const DDL_SCRIPTS: string[] = [
   `CREATE INDEX IF NOT EXISTS idx_item_tags_tag_id ON item_tags (tag_id);`,
   `CREATE INDEX IF NOT EXISTS idx_item_tags_item_id ON item_tags (item_id);`,
   `CREATE INDEX IF NOT EXISTS idx_two_fa_tickets_expires ON two_fa_tickets (expires_at);`,
+  `CREATE INDEX IF NOT EXISTS idx_shared_items_user ON shared_items (user_id);`,
+  `CREATE INDEX IF NOT EXISTS idx_shared_items_expires ON shared_items (expires_at);`,
 
   // 触发器：自动更新 updated_at
   `CREATE OR REPLACE FUNCTION update_updated_at()
