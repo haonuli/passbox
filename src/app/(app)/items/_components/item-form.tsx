@@ -34,6 +34,7 @@ import { saveHistory } from '@/actions/item-history';
 import { encrypt } from '@/lib/crypto/aes';
 import { ITEM_TYPE_CONFIGS, type FieldConfig, type ItemTypeConfig } from '@/lib/item-types';
 import { getFieldSchema } from '@/lib/validations';
+import { detectKeyType, extractPublicKey } from '@/lib/ssh-key-parser';
 import type { EncryptedData } from '@/types/crypto';
 import type { DecryptedItem, ItemData } from '@/types/vault';
 import { cn } from '@/lib/utils';
@@ -160,6 +161,8 @@ export function ItemForm({ mode, itemId }: ItemFormProps) {
     register,
     handleSubmit,
     reset,
+    watch,
+    setValue,
     formState: { errors },
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -195,6 +198,22 @@ export function ItemForm({ mode, itemId }: ItemFormProps) {
       setVaultId(vaults[0].id);
     }
   }, [vaults, vaultId]);
+
+  // SSH 密钥类型：私钥变化时自动检测密钥类型，并在公钥为空时尝试提取
+  const watchedPrivateKey = watch('privateKey');
+  const watchedPublicKey = watch('publicKey');
+  useEffect(() => {
+    if (currentConfig?.code !== 'ssh_key' || !watchedPrivateKey) return;
+
+    const keyType = detectKeyType(watchedPrivateKey);
+    if (keyType !== 'Unknown') {
+      setValue('keyType', keyType);
+    }
+    const pubKey = extractPublicKey(watchedPrivateKey);
+    if (pubKey && !watchedPublicKey) {
+      setValue('publicKey', pubKey);
+    }
+  }, [watchedPrivateKey, watchedPublicKey, currentConfig, setValue]);
 
   /** 根据条目类型构建 payload */
   const buildPayload = useCallback((values: FormValues): ItemData => {

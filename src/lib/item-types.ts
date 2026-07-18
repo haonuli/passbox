@@ -21,6 +21,7 @@ import {
   BookOpen,
   BadgeCheck,
   Gift,
+  TerminalSquare,
   Globe,
   Phone,
   Mail,
@@ -45,6 +46,8 @@ export interface FieldConfig {
   maxLength?: number;
   /** 详情页是否可复制 */
   copyable?: boolean;
+  /** 是否可掩码显示（如私钥等敏感长文本） */
+  maskable?: boolean;
 }
 
 /** 条目类型配置 */
@@ -286,6 +289,22 @@ export const ITEM_TYPE_CONFIGS: ItemTypeConfig[] = [
       { name: 'memberName', label: '会员姓名', type: 'text', placeholder: '会员姓名', col: 1 },
       { name: 'membershipNumber', label: '会员号', type: 'text', placeholder: '会员号码', copyable: true, col: 2 },
       { name: 'pointsBalance', label: '积分余额', type: 'text', placeholder: '当前积分' },
+      NOTES_FIELD,
+    ],
+  },
+  {
+    id: 17,
+    code: 'ssh_key',
+    name: 'SSH 密钥',
+    icon: TerminalSquare,
+    fields: [
+      { name: 'hostname', label: '主机名', type: 'text', placeholder: 'example.com', col: 1 },
+      { name: 'username', label: '用户名', type: 'text', placeholder: 'root', col: 2 },
+      { name: 'port', label: '端口', type: 'text', placeholder: '22', col: 1 },
+      { name: 'keyType', label: '密钥类型', type: 'text', placeholder: 'Ed25519 / RSA / ECDSA', col: 2 },
+      { name: 'publicKey', label: '公钥', type: 'textarea', placeholder: 'ssh-ed25519 AAAA...', copyable: true },
+      { name: 'privateKey', label: '私钥', type: 'textarea', placeholder: '-----BEGIN OPENSSH PRIVATE KEY-----', copyable: true, maskable: true },
+      { name: 'passphrase', label: '密钥口令', type: 'password', placeholder: '（可选）密钥口令', copyable: true },
       NOTES_FIELD,
     ],
   },

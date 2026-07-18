@@ -111,6 +111,12 @@ export interface ItemData {
   programName?: string;
   pointsBalance?: string;
 
+  // ---- ssh_key ----
+  keyType?: string;
+  publicKey?: string;
+  privateKey?: string;
+  passphrase?: string;
+
   // ---- common ----
   notes?: string;
 }

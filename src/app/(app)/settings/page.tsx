@@ -4,11 +4,12 @@
  * 设置入口列表，链接到各子设置页。
  */
 import Link from 'next/link';
-import { Shield, Palette, Database, Share2, Plane } from 'lucide-react';
+import { Shield, Palette, Database, Share2, Plane, TerminalSquare } from 'lucide-react';
 
 const SETTINGS_ITEMS = [
   { href: '/settings/security', label: '安全设置', description: '两步验证（2FA）、账户安全', icon: Shield },
   { href: '/settings/preferences', label: '偏好设置', description: '自动锁定时长、剪贴板清除时间', icon: Palette },
+  { href: '/settings/ssh-keys', label: 'SSH 密钥管理', description: '生成、导入和管理 SSH 密钥', icon: TerminalSquare },
   { href: '/settings/data', label: '数据管理', description: '导入、导出密码数据', icon: Database },
   { href: '/settings/shares', label: '共享管理', description: '查看和管理共享链接', icon: Share2 },
   { href: '/settings/travel-mode', label: '旅行模式', description: '旅行时隐藏敏感数据', icon: Plane },
