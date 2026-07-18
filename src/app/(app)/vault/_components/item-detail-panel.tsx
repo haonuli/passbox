@@ -41,6 +41,7 @@ import { TotpDisplay } from '@/components/item/totp-display';
 import { getItemTypeConfigByCode, getFieldIcon, type FieldConfig } from '@/lib/item-types';
 import { ShareDialog } from '@/app/(app)/settings/shares/_components/share-dialog';
 import { HistoryDialog } from '@/app/(app)/items/_components/history-dialog';
+import { AttachmentSection } from './attachment-section';
 
 interface ItemDetailPanelProps {
   itemId: string | null;
@@ -309,6 +310,8 @@ export function ItemDetailPanel({ itemId, onBack }: ItemDetailPanelProps) {
             )}
           </div>
         )}
+
+        <AttachmentSection itemId={item.id} />
 
         <div className="px-4 py-3 text-xs text-muted-foreground">
           <div>创建时间：{new Date(item.createdAt).toLocaleString('zh-CN')}</div>

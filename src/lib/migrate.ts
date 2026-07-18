@@ -131,6 +131,18 @@ const DDL_SCRIPTS: string[] = [
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
   );`,
 
+  // 10. item_attachments（条目附件，加密存储）
+  `CREATE TABLE IF NOT EXISTS item_attachments (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    item_id         TEXT NOT NULL REFERENCES items(id) ON DELETE CASCADE,
+    user_id         TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    filename_encrypted   TEXT NOT NULL,
+    mime_type_encrypted  TEXT NOT NULL,
+    file_size       INTEGER NOT NULL,
+    data_encrypted  TEXT NOT NULL,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  );`,
+
   // 索引
   `CREATE INDEX IF NOT EXISTS idx_vaults_user_id ON vaults (user_id);`,
   `CREATE INDEX IF NOT EXISTS idx_items_user_id ON items (user_id);`,
@@ -145,6 +157,7 @@ const DDL_SCRIPTS: string[] = [
   `CREATE INDEX IF NOT EXISTS idx_shared_items_user ON shared_items (user_id);`,
   `CREATE INDEX IF NOT EXISTS idx_shared_items_expires ON shared_items (expires_at);`,
   `CREATE INDEX IF NOT EXISTS idx_item_history_item ON item_history (item_id, created_at DESC);`,
+  `CREATE INDEX IF NOT EXISTS idx_attachments_item ON item_attachments (item_id);`,
 
   // 触发器：自动更新 updated_at
   `CREATE OR REPLACE FUNCTION update_updated_at()
