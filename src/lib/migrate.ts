@@ -61,6 +61,10 @@ const DDL_SCRIPTS: string[] = [
   // M-9：为已存在的 users 表补充 token_version 列（幂等，CREATE TABLE IF NOT EXISTS 不会添加新列）
   `ALTER TABLE users ADD COLUMN IF NOT EXISTS token_version INTEGER NOT NULL DEFAULT 0;`,
 
+  // 旅行模式：users.travel_mode（是否开启旅行模式）+ vaults.travel_safe（保险库是否旅行安全）
+  `ALTER TABLE users ADD COLUMN IF NOT EXISTS travel_mode BOOLEAN NOT NULL DEFAULT FALSE;`,
+  `ALTER TABLE vaults ADD COLUMN IF NOT EXISTS travel_safe BOOLEAN NOT NULL DEFAULT FALSE;`,
+
   // 3. vaults（保险库，用户私有）
   `CREATE TABLE IF NOT EXISTS vaults (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),

@@ -8,9 +8,10 @@
  */
 'use client';
 
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { Vault, Shield, KeyRound, Settings, Tag, FolderOpen, Bookmark, X } from 'lucide-react';
+import { Vault, Shield, KeyRound, Settings, Tag, FolderOpen, Bookmark, X, Plane } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useVaultStore } from '@/stores/vault-store';
 import { useSavedSearchStore } from '@/stores/saved-search-store';
@@ -45,6 +46,26 @@ export function Sidebar({ mobileOpen, onClose }: SidebarProps) {
   const removeSearch = useSavedSearchStore((s) => s.removeSearch);
   const expiryCount = getExpiryCount(items);
 
+  const [travelMode, setTravelMode] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch('/api/travel-mode');
+        if (res.ok) {
+          const data = await res.json();
+          if (!cancelled) setTravelMode(data.travelMode as boolean);
+        }
+      } catch {
+        // 静默失败，指示器非核心功能
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   return (
     <>
       {mobileOpen && (
@@ -62,8 +83,14 @@ export function Sidebar({ mobileOpen, onClose }: SidebarProps) {
         )}
       >
         {/* 品牌标识 */}
-        <div className="flex h-14 items-center border-b border-border px-6">
+        <div className="flex h-14 items-center gap-2 border-b border-border px-6">
           <span className="text-base font-semibold tracking-tight">PassBox</span>
+          {travelMode && (
+            <span className="flex items-center gap-1 rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700 dark:bg-blue-950 dark:text-blue-300">
+              <Plane className="h-3 w-3" />
+              旅行模式
+            </span>
+          )}
         </div>
 
         {/* 导航 */}

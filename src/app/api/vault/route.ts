@@ -11,7 +11,7 @@ import { db } from '@/lib/db';
 import type { EncryptedData } from '@/types/crypto';
 
 interface VaultResponse {
-  vaults: Array<{ id: string; nameEncrypted: EncryptedData }>;
+  vaults: Array<{ id: string; nameEncrypted: EncryptedData; travelSafe: boolean }>;
   items: Array<{
     id: string;
     vaultId: string;
@@ -44,13 +44,32 @@ export async function GET(): Promise<NextResponse> {
     }
     const userId = session.sub;
 
+    // 查询用户的旅行模式状态
+    const userResult = await db.query(
+      'SELECT travel_mode FROM users WHERE id = $1',
+      [userId],
+    );
+    const travelMode =
+      userResult.rows.length > 0
+        ? (userResult.rows[0].travel_mode as boolean)
+        : false;
+
+    // 旅行模式开启时，仅返回 travel_safe 的保险库及其条目
+    const vaultFilter = travelMode ? 'AND travel_safe = TRUE' : '';
+    const itemFilter = travelMode
+      ? 'AND vault_id IN (SELECT id FROM vaults WHERE user_id = $1 AND travel_safe = TRUE)'
+      : '';
+
     const [vaultsResult, itemsResult, tagsResult, itemTypesResult] = await Promise.all([
-      db.query('SELECT id, name_encrypted FROM vaults WHERE user_id = $1', [userId]),
+      db.query(
+        `SELECT id, name_encrypted, travel_safe FROM vaults WHERE user_id = $1 ${vaultFilter}`,
+        [userId],
+      ),
       db.query(
         `SELECT id, vault_id, item_type_id, title_encrypted, data_encrypted,
                 is_favorite, created_at, updated_at
          FROM items
-         WHERE user_id = $1
+         WHERE user_id = $1 ${itemFilter}
          ORDER BY updated_at DESC`,
         [userId],
       ),
@@ -61,6 +80,7 @@ export async function GET(): Promise<NextResponse> {
     const vaults = vaultsResult.rows.map((row) => ({
       id: row.id as string,
       nameEncrypted: JSON.parse(row.name_encrypted as string) as EncryptedData,
+      travelSafe: row.travel_safe as boolean,
     }));
 
     const items = itemsResult.rows.map((row) => ({
