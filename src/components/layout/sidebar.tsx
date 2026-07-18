@@ -13,6 +13,7 @@ import { usePathname } from 'next/navigation';
 import { Vault, Shield, KeyRound, Settings, Tag, FolderOpen } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useVaultStore } from '@/stores/vault-store';
+import { getExpiryCount } from '@/lib/security/expiry-check';
 
 interface NavItem {
   href: string;
@@ -36,6 +37,8 @@ export function Sidebar({ mobileOpen, onClose }: SidebarProps) {
   const pathname = usePathname();
   const vaults = useVaultStore((s) => s.vaults);
   const tags = useVaultStore((s) => s.tags);
+  const items = useVaultStore((s) => s.items);
+  const expiryCount = getExpiryCount(items);
 
   return (
     <>
@@ -63,6 +66,7 @@ export function Sidebar({ mobileOpen, onClose }: SidebarProps) {
           {NAV_ITEMS.map((item) => {
             const Icon = item.icon;
             const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
+            const showExpiryBadge = item.href === '/security' && expiryCount > 0;
             return (
               <Link
                 key={item.href}
@@ -77,6 +81,11 @@ export function Sidebar({ mobileOpen, onClose }: SidebarProps) {
               >
                 <Icon className="h-4 w-4" />
                 {item.label}
+                {showExpiryBadge && (
+                  <span className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1.5 text-xs font-semibold text-white">
+                    {expiryCount}
+                  </span>
+                )}
               </Link>
             );
           })}

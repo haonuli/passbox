@@ -6,13 +6,15 @@
 'use client';
 
 import { useEffect, useState, useMemo } from 'react';
-import { Shield, ShieldCheck, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { Shield, ShieldCheck, AlertTriangle, CheckCircle2, Clock } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useVaultStore } from '@/stores/vault-store';
 import { detectDuplicatePasswords, type DuplicateGroup } from '@/lib/security/duplicate-check';
+import { getExpiryCount } from '@/lib/security/expiry-check';
 import { assessPassword } from '@/lib/crypto/strength';
 import { DuplicateList } from './duplicate-list';
 import { BreachList } from './breach-list';
+import { ExpiryList } from './expiry-list';
 
 export function SecurityView() {
   const items = useVaultStore((s) => s.items);
@@ -59,9 +61,10 @@ export function SecurityView() {
 
     const weakCount = weakPasswords.length;
     const dupCount = duplicates.reduce((sum, g) => sum + g.items.length, 0);
+    const expiryCount = getExpiryCount(items);
 
     // 每个问题扣分，最低 0
-    const deduction = Math.min(100, weakCount * 10 + dupCount * 5);
+    const deduction = Math.min(100, weakCount * 10 + dupCount * 5 + expiryCount * 5);
     return Math.max(0, 100 - deduction);
   }, [items, weakPasswords, duplicates]);
 
@@ -92,7 +95,7 @@ export function SecurityView() {
               </p>
             ) : (
               <p className="mt-3 text-sm text-muted-foreground">
-                发现 {weakPasswords.length + duplicates.reduce((s, g) => s + g.items.length, 0)} 个安全问题
+                发现 {weakPasswords.length + duplicates.reduce((s, g) => s + g.items.length, 0) + getExpiryCount(items)} 个安全问题
               </p>
             )}
           </div>
@@ -179,6 +182,32 @@ export function SecurityView() {
             {expandedSection === 'breach' && (
               <div className="mt-2">
                 <BreachList />
+              </div>
+            )}
+          </section>
+
+          {/* 过期条目清单 */}
+          <section>
+            <button
+              onClick={() => setExpandedSection(expandedSection === 'expiry' ? null : 'expiry')}
+              className="flex w-full items-center justify-between border-b border-border pb-2"
+            >
+              <span className="flex items-center gap-2 text-sm font-semibold">
+                <Clock className="h-4 w-4 text-orange-500" />
+                过期提醒
+                {getExpiryCount(items) > 0 && (
+                  <span className="rounded-full bg-red-500/10 px-2 py-0.5 text-xs text-red-600">
+                    {getExpiryCount(items)}
+                  </span>
+                )}
+              </span>
+              <span className="text-xs text-muted-foreground">
+                {getExpiryCount(items) > 0 ? '需处理' : '无问题'}
+              </span>
+            </button>
+            {expandedSection === 'expiry' && (
+              <div className="mt-2">
+                <ExpiryList items={items} />
               </div>
             )}
           </section>
