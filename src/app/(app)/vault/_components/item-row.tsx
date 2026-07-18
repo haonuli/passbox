@@ -8,25 +8,18 @@
 'use client';
 
 import { useCallback } from 'react';
-import { Star, FileText } from 'lucide-react';
+import { Star } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { useVaultStore } from '@/stores/vault-store';
 import { toggleFavorite } from '@/actions/item';
-import { getItemTypeConfigByCode } from '@/lib/item-types';
+import { FaviconImage } from '@/components/favicon-image';
 import type { DecryptedItem } from '@/types/vault';
 
 interface ItemRowProps {
   item: DecryptedItem;
   isSelected: boolean;
   onSelect: (itemId: string) => void;
-}
-
-/** 条目类型图标 */
-function ItemTypeIcon({ item }: { item: DecryptedItem }) {
-  const config = getItemTypeConfigByCode(item.itemTypeCode);
-  const Icon = config?.icon ?? FileText;
-  return <Icon className="h-4 w-4 text-muted-foreground" />;
 }
 
 export function ItemRow({ item, isSelected, onSelect }: ItemRowProps) {
@@ -63,7 +56,7 @@ export function ItemRow({ item, isSelected, onSelect }: ItemRowProps) {
         isSelected ? 'bg-primary/10 border-l-2 border-l-primary' : 'hover:bg-muted/50',
       )}
     >
-      <ItemTypeIcon item={item} />
+      <FaviconImage url={item.data.url} itemTypeCode={item.itemTypeCode} className="h-4 w-4 text-muted-foreground" />
       <div className="flex min-w-0 flex-1 flex-col">
         <span className="truncate text-sm font-medium">{item.title}</span>
         {item.data.username && (

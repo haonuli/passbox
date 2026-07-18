@@ -9,10 +9,11 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { Vault, Shield, KeyRound, Settings, Tag, FolderOpen } from 'lucide-react';
+import { usePathname, useRouter } from 'next/navigation';
+import { Vault, Shield, KeyRound, Settings, Tag, FolderOpen, Bookmark, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useVaultStore } from '@/stores/vault-store';
+import { useSavedSearchStore } from '@/stores/saved-search-store';
 import { getExpiryCount } from '@/lib/security/expiry-check';
 
 interface NavItem {
@@ -35,9 +36,13 @@ interface SidebarProps {
 
 export function Sidebar({ mobileOpen, onClose }: SidebarProps) {
   const pathname = usePathname();
+  const router = useRouter();
   const vaults = useVaultStore((s) => s.vaults);
   const tags = useVaultStore((s) => s.tags);
   const items = useVaultStore((s) => s.items);
+  const setSearchQuery = useVaultStore((s) => s.setSearchQuery);
+  const searches = useSavedSearchStore((s) => s.searches);
+  const removeSearch = useSavedSearchStore((s) => s.removeSearch);
   const expiryCount = getExpiryCount(items);
 
   return (
@@ -130,6 +135,41 @@ export function Sidebar({ mobileOpen, onClose }: SidebarProps) {
                 >
                   {tag.name}
                 </Link>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* 智能文件夹 */}
+        {searches.length > 0 && (
+          <div className="border-t border-border px-3 py-2">
+            <div className="mb-1 flex items-center gap-2 px-2 text-xs font-medium text-muted-foreground">
+              <Bookmark className="h-3 w-3" />
+              智能文件夹
+            </div>
+            <div className="space-y-0.5">
+              {searches.map((search) => (
+                <div key={search.id} className="group flex items-center">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSearchQuery(search.query);
+                      router.push('/vault');
+                      onClose();
+                    }}
+                    className="flex-1 truncate rounded-md px-3 py-1.5 text-left text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                  >
+                    {search.name}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => removeSearch(search.id)}
+                    className="ml-1 hidden rounded p-1 text-muted-foreground hover:text-foreground group-hover:block"
+                    aria-label="删除"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
               ))}
             </div>
           </div>

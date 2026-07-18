@@ -12,15 +12,25 @@
  */
 'use client';
 
-import { useCallback, useDeferredValue, useRef, useEffect } from 'react';
+import { useCallback, useDeferredValue, useRef, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Menu, Lock, LogOut, Search, X } from 'lucide-react';
+import { Menu, Lock, LogOut, Search, X, BookmarkPlus } from 'lucide-react';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { useLock } from '@/hooks/use-lock';
 import { useAuthStore } from '@/stores/auth-store';
 import { useVaultStore } from '@/stores/vault-store';
+import { useSavedSearchStore } from '@/stores/saved-search-store';
 
 interface AppHeaderProps {
   onOpenSidebar: () => void;
@@ -33,7 +43,10 @@ export function AppHeader({ onOpenSidebar }: AppHeaderProps) {
   const searchQuery = useVaultStore((s) => s.searchQuery);
   const setSearchQuery = useVaultStore((s) => s.setSearchQuery);
   const loaded = useVaultStore((s) => s.loaded);
+  const addSearch = useSavedSearchStore((s) => s.addSearch);
   const searchRef = useRef<HTMLInputElement>(null);
+  const [saveDialogOpen, setSaveDialogOpen] = useState(false);
+  const [searchName, setSearchName] = useState('');
 
   const deferredQuery = useDeferredValue(searchQuery);
 
@@ -73,6 +86,20 @@ export function AppHeader({ onOpenSidebar }: AppHeaderProps) {
     setSearchQuery('');
     searchRef.current?.focus();
   }, [setSearchQuery]);
+
+  const handleOpenSaveDialog = useCallback(() => {
+    setSearchName(deferredQuery);
+    setSaveDialogOpen(true);
+  }, [deferredQuery]);
+
+  const handleSaveSearch = useCallback(() => {
+    const name = searchName.trim();
+    if (!name || !deferredQuery.trim()) return;
+    addSearch(name, deferredQuery.trim());
+    setSaveDialogOpen(false);
+    setSearchName('');
+    toast.success('已保存为智能文件夹');
+  }, [searchName, deferredQuery, addSearch]);
 
   return (
     <header className="flex h-14 items-center gap-3 border-b border-border px-4">
@@ -115,6 +142,20 @@ export function AppHeader({ onOpenSidebar }: AppHeaderProps) {
         )}
       </div>
 
+      {/* 保存搜索为智能文件夹 */}
+      {deferredQuery && (
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={handleOpenSaveDialog}
+          aria-label="保存搜索"
+          className="shrink-0"
+        >
+          <BookmarkPlus className="h-4 w-4" />
+          <span className="ml-1.5 hidden sm:inline">保存搜索</span>
+        </Button>
+      )}
+
       <div className="ml-auto flex items-center gap-2">
         {user && (
           <span className="hidden text-xs text-muted-foreground sm:inline">{user.email}</span>
@@ -129,6 +170,35 @@ export function AppHeader({ onOpenSidebar }: AppHeaderProps) {
         </Button>
         <ThemeToggle />
       </div>
+
+      {/* 保存搜索弹窗 */}
+      <Dialog open={saveDialogOpen} onOpenChange={setSaveDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>保存为智能文件夹</DialogTitle>
+            <DialogDescription>
+              为当前搜索「{deferredQuery}」命名，保存后可在侧边栏快速访问。
+            </DialogDescription>
+          </DialogHeader>
+          <Input
+            value={searchName}
+            onChange={(e) => setSearchName(e.target.value)}
+            placeholder="输入名称"
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') handleSaveSearch();
+            }}
+            autoFocus
+          />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSaveDialogOpen(false)}>
+              取消
+            </Button>
+            <Button onClick={handleSaveSearch} disabled={!searchName.trim()}>
+              保存
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </header>
   );
 }

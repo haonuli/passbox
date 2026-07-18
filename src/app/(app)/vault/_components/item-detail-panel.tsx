@@ -38,6 +38,7 @@ import { useSettingsStore } from '@/stores/settings-store';
 import { deleteItem, toggleFavorite } from '@/actions/item';
 import { useClipboard } from '@/hooks/use-clipboard';
 import { TotpDisplay } from '@/components/item/totp-display';
+import { FaviconImage } from '@/components/favicon-image';
 import { getItemTypeConfigByCode, getFieldIcon, type FieldConfig } from '@/lib/item-types';
 import { ShareDialog } from '@/app/(app)/settings/shares/_components/share-dialog';
 import { HistoryDialog } from '@/app/(app)/items/_components/history-dialog';
@@ -213,6 +214,11 @@ export function ItemDetailPanel({ itemId, onBack }: ItemDetailPanelProps) {
         >
           <ArrowLeft className="h-4 w-4" />
         </Button>
+        <FaviconImage
+          url={item.data.url}
+          itemTypeCode={item.itemTypeCode}
+          className="h-5 w-5 shrink-0 text-muted-foreground"
+        />
         <h1 className="flex-1 truncate text-base font-semibold">{item.title}</h1>
         <Button
           size="icon"
