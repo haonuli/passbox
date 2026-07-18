@@ -65,6 +65,11 @@ const DDL_SCRIPTS: string[] = [
   `ALTER TABLE users ADD COLUMN IF NOT EXISTS travel_mode BOOLEAN NOT NULL DEFAULT FALSE;`,
   `ALTER TABLE vaults ADD COLUMN IF NOT EXISTS travel_safe BOOLEAN NOT NULL DEFAULT FALSE;`,
 
+  // SRP 认证协议：在 users 表补充 srp_salt 与 srp_verifier 列
+  // 注册时由服务端生成，登录时用于 SRP 握手验证（替换 authHash 直接传输）
+  `ALTER TABLE users ADD COLUMN IF NOT EXISTS srp_salt TEXT;`,
+  `ALTER TABLE users ADD COLUMN IF NOT EXISTS srp_verifier TEXT;`,
+
   // 3. vaults（保险库，用户私有）
   `CREATE TABLE IF NOT EXISTS vaults (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -112,7 +117,19 @@ const DDL_SCRIPTS: string[] = [
     created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
   );`,
 
-  // 8. shared_items（安全共享链接）
+  // 8. srp_sessions（SRP 登录握手临时会话，5 分钟过期，验证后删除）
+  // 存储 SRP 握手过程中服务端的临时密钥，适配 serverless 多实例部署
+  `CREATE TABLE IF NOT EXISTS srp_sessions (
+    id                      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id                 TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    client_public_ephemeral TEXT NOT NULL,
+    server_secret_ephemeral TEXT NOT NULL,
+    expires_at              TIMESTAMPTZ NOT NULL DEFAULT NOW() + INTERVAL '5 minutes',
+    created_at              TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  );`,
+  `CREATE INDEX IF NOT EXISTS idx_srp_sessions_expires ON srp_sessions (expires_at);`,
+
+  // 9. shared_items（安全共享链接）
   `CREATE TABLE IF NOT EXISTS shared_items (
     id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id               TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -125,7 +142,7 @@ const DDL_SCRIPTS: string[] = [
     created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
   );`,
 
-  // 9. item_history（条目历史版本，更新前快照）
+  // 10. item_history（条目历史版本，更新前快照）
   `CREATE TABLE IF NOT EXISTS item_history (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     item_id         TEXT NOT NULL REFERENCES items(id) ON DELETE CASCADE,
@@ -135,7 +152,7 @@ const DDL_SCRIPTS: string[] = [
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
   );`,
 
-  // 10. item_attachments（条目附件，加密存储）
+  // 11. item_attachments（条目附件，加密存储）
   `CREATE TABLE IF NOT EXISTS item_attachments (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     item_id         TEXT NOT NULL REFERENCES items(id) ON DELETE CASCADE,

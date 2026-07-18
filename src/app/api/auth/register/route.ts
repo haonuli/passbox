@@ -29,6 +29,7 @@ import {
 import { isValidRecoveryCodeFormat } from '@/lib/recovery-code';
 import { encryptedDataSchema, kdfParamsSchema, kdfSaltSchema } from '@/lib/schemas';
 import type { RegisterResponse } from '@/types/api';
+import { generateSalt, derivePrivateKey, deriveVerifier } from 'secure-remote-password/client';
 
 /** bcrypt cost factor。authHash 已经过 Argon2id+HKDF 派生，cost=10 足够纵深防御 */
 const BCRYPT_COST = 10;
@@ -94,6 +95,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const passwordHash = await bcrypt.hash(authHash, BCRYPT_COST);
   const recoveryCodeHash = await bcrypt.hash(recoveryCode, BCRYPT_COST);
 
+  // SRP verifier 生成：服务端生成 salt，基于 email + authHash 派生私钥与验证器
+  // 登录时通过 SRP 协议验证，authHash 不再直接传输
+  const srpSalt = generateSalt();
+  const srpPrivateKey = derivePrivateKey(srpSalt, emailNormalized, authHash);
+  const srpVerifier = deriveVerifier(srpPrivateKey);
+
   // base64 salt → Buffer（BYTEA 列）
   const kdfSaltBuffer = Buffer.from(kdfSalt, 'base64');
 
@@ -125,8 +132,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       `INSERT INTO users
          (email, email_normalized, kdf_type, kdf_salt,
           kdf_memory_kib, kdf_iterations, kdf_parallelism,
-          password_hash, encrypted_key, recovery_encrypted_key, recovery_code_hash)
-       VALUES ($1, $2, 'argon2id', $3, $4, $5, $6, $7, $8, $9, $10)
+          password_hash, encrypted_key, recovery_encrypted_key, recovery_code_hash,
+          srp_salt, srp_verifier)
+       VALUES ($1, $2, 'argon2id', $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
        RETURNING id`,
       [
         email.trim(),
@@ -139,6 +147,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         encryptedKeyJson,
         recoveryEncryptedKeyJson,
         recoveryCodeHash,
+        srpSalt,
+        srpVerifier,
       ],
     );
     const userId = userResult.rows[0].id as string;

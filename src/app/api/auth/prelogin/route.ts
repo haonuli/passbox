@@ -41,9 +41,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
     const emailNormalized = parsed.data.email.toLowerCase();
 
-    // 查询用户 KDF 参数
+    // 查询用户 KDF 参数 + SRP salt
     const result = await db.query(
-      'SELECT kdf_salt, kdf_memory_kib, kdf_iterations, kdf_parallelism FROM users WHERE email_normalized = $1',
+      'SELECT kdf_salt, kdf_memory_kib, kdf_iterations, kdf_parallelism, srp_salt FROM users WHERE email_normalized = $1',
       [emailNormalized],
     );
 
@@ -53,6 +53,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       const response: PreloginResponse = {
         kdfSalt: randomSalt,
         kdfParams: DEFAULT_KDF_PARAMS,
+        srpSalt: '',
       };
       return NextResponse.json(response, { status: 200 });
     }
@@ -66,6 +67,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         iterations: user.kdf_iterations as number,
         parallelism: user.kdf_parallelism as number,
       },
+      srpSalt: (user.srp_salt as string | null) ?? '',
     };
     return NextResponse.json(response, { status: 200 });
   } catch (err) {

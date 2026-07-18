@@ -88,6 +88,8 @@ export interface PreloginResponse {
   /** base64(16 bytes salt) */
   kdfSalt: string;
   kdfParams: KdfParams;
+  /** SRP salt，注册时生成；未注册用户返回空字符串（防枚举） */
+  srpSalt: string;
 }
 
 /**
@@ -100,6 +102,57 @@ export interface LoginRequest {
   authHash: string;
   /** P1: 开启 2FA 时需传 */
   totpCode?: string;
+}
+
+/**
+ * SRP 登录第一步请求（initiate）
+ *
+ * 客户端生成临时密钥对 A，发送 A.public 给服务端。
+ */
+export interface SrpInitiateRequest {
+  email: string;
+  /** 客户端临时公钥（hex） */
+  clientPublicEphemeral: string;
+}
+
+/**
+ * SRP 登录第一步响应
+ *
+ * 服务端生成临时密钥对 B，返回 B.public + srpSalt 供客户端派生会话。
+ */
+export interface SrpInitiateResponse {
+  /** SRP salt（注册时生成） */
+  srpSalt: string;
+  /** 服务端临时公钥（hex） */
+  serverPublicEphemeral: string;
+}
+
+/**
+ * SRP 登录第二步请求（verify）
+ *
+ * 客户端计算会话证明后发送，服务端验证并签发会话。
+ */
+export interface SrpVerifyRequest {
+  email: string;
+  /** 客户端临时公钥（hex，与 initiate 一致） */
+  clientPublicEphemeral: string;
+  /** 客户端会话证明（hex） */
+  clientSessionProof: string;
+}
+
+/**
+ * SRP 登录第二步响应
+ *
+ * 验证成功后返回服务端会话证明 + 加密密钥参数，结构与 LoginResponse 一致并扩展 serverSessionProof。
+ */
+export interface SrpVerifyResponse {
+  /** 服务端会话证明（hex），客户端验证后确认服务端身份 */
+  serverSessionProof: string;
+  user: { id: string; email: string };
+  /** 客户端用 Master Key 解密得到 Symmetric Key */
+  encryptedKey: EncryptedData;
+  kdfSalt: string;
+  kdfParams: KdfParams;
 }
 
 /**

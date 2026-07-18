@@ -26,7 +26,7 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/form';
-import { useLogin } from '@/hooks/use-login';
+import { useSrpLogin } from '@/hooks/use-srp-login';
 import { getSafeRedirect } from '@/lib/redirect';
 import { emailSchema, loginPasswordSchema } from '@/lib/validations';
 import { TotpChallenge } from './totp-challenge';
@@ -40,7 +40,7 @@ const loginSchema = z.object({
 type LoginFormValues = z.infer<typeof loginSchema>;
 
 export function LoginForm() {
-  const { status, error, login, totpChallenge, completeTotpChallenge } = useLogin();
+  const { status, error, login, totpChallenge, completeTotpChallenge } = useSrpLogin();
   const router = useRouter();
   const searchParams = useSearchParams();
 
