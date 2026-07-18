@@ -46,6 +46,9 @@ yarn-error.log*
 /CLAUDE.md
 /TASK_TRACKING.md
 
+# 项目设计文档（内部，不公开到仓库）
+/docs/
+
 # vercel
 .vercel
 
