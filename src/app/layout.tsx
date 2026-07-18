@@ -1,10 +1,11 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { headers } from "next/headers";
 import "./globals.css";
 
 import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
+import { ServiceWorkerRegister, OfflineIndicator } from "@/components/pwa/register-sw";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -19,6 +20,18 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "PassBox - 零知识密码管理器",
   description: "端到端加密的个人密码管理器，只有你能解密自己的数据。",
+  manifest: "/manifest.json",
+  icons: {
+    icon: "/icon.svg",
+    apple: "/icon.svg",
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#0a0a0a",
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
 };
 
 export default async function RootLayout({
@@ -44,6 +57,8 @@ export default async function RootLayout({
         >
           {children}
           <Toaster richColors position="top-center" />
+          <ServiceWorkerRegister />
+          <OfflineIndicator />
         </ThemeProvider>
       </body>
     </html>

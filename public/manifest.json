@@ -1,0 +1,17 @@
+{
+  "name": "PassBox - 零知识密码管理器",
+  "short_name": "PassBox",
+  "description": "端到端加密的零知识密码管理器",
+  "start_url": "/vault",
+  "display": "standalone",
+  "background_color": "#0a0a0a",
+  "theme_color": "#0a0a0a",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
