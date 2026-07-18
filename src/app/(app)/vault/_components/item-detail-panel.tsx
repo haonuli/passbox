@@ -21,6 +21,7 @@ import {
   ExternalLink,
   Loader2,
   MousePointerClick,
+  History,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -39,6 +40,7 @@ import { useClipboard } from '@/hooks/use-clipboard';
 import { TotpDisplay } from '@/components/item/totp-display';
 import { getItemTypeConfigByCode, getFieldIcon, type FieldConfig } from '@/lib/item-types';
 import { ShareDialog } from '@/app/(app)/settings/shares/_components/share-dialog';
+import { HistoryDialog } from '@/app/(app)/items/_components/history-dialog';
 
 interface ItemDetailPanelProps {
   itemId: string | null;
@@ -121,6 +123,7 @@ export function ItemDetailPanel({ itemId, onBack }: ItemDetailPanelProps) {
   const [deleting, setDeleting] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
+  const [historyDialogOpen, setHistoryDialogOpen] = useState(false);
   const { copy } = useClipboard();
   const clipboardClearSeconds = useSettingsStore((s) => s.clipboardClearSeconds);
 
@@ -235,6 +238,14 @@ export function ItemDetailPanel({ itemId, onBack }: ItemDetailPanelProps) {
         <Button
           size="sm"
           variant="ghost"
+          onClick={() => setHistoryDialogOpen(true)}
+        >
+          <History className="h-4 w-4" />
+          <span className="ml-1.5 hidden sm:inline">历史</span>
+        </Button>
+        <Button
+          size="sm"
+          variant="ghost"
           onClick={() => router.push(`/items/${item.id}/edit`)}
         >
           <Pencil className="h-4 w-4" />
@@ -310,6 +321,13 @@ export function ItemDetailPanel({ itemId, onBack }: ItemDetailPanelProps) {
         item={item}
         open={shareDialogOpen}
         onOpenChange={setShareDialogOpen}
+      />
+
+      {/* 历史版本弹窗 */}
+      <HistoryDialog
+        itemId={item.id}
+        open={historyDialogOpen}
+        onOpenChange={setHistoryDialogOpen}
       />
 
       {/* 删除确认弹窗 */}

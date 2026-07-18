@@ -30,6 +30,7 @@ import { TagInput } from '@/app/(app)/items/_components/tag-input';
 import { useAuthStore } from '@/stores/auth-store';
 import { useVaultStore } from '@/stores/vault-store';
 import { createItem, updateItem } from '@/actions/item';
+import { saveHistory } from '@/actions/item-history';
 import { encrypt } from '@/lib/crypto/aes';
 import { ITEM_TYPE_CONFIGS, type FieldConfig, type ItemTypeConfig } from '@/lib/item-types';
 import { getFieldSchema } from '@/lib/validations';
@@ -270,6 +271,9 @@ export function ItemForm({ mode, itemId }: ItemFormProps) {
             toast.error(result.error);
           }
         } else {
+          if (existingItem) {
+            await saveHistory(existingItem.id);
+          }
           const result = await updateItem(targetItemId, {
             vaultId: targetVaultId !== existingItem?.vaultId ? targetVaultId : undefined,
             titleEncrypted,
