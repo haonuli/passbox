@@ -3,7 +3,7 @@
  */
 
 /** 判断元素是否可见 */
-function isVisible(element: HTMLInputElement): boolean {
+export function isVisible(element: HTMLInputElement): boolean {
   if (element.hidden || element.disabled) return false;
 
   const rect = element.getBoundingClientRect();

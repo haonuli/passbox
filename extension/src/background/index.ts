@@ -43,6 +43,18 @@ async function handleMessage(message: Message): Promise<MessageResponse> {
         return { ok: true, data: credentials };
       }
 
+      // D-04: 身份信息填充
+      case 'FILL_IDENTITY': {
+        const identities = await autoFill.handleFillIdentityRequest();
+        return { ok: true, data: identities };
+      }
+
+      // D-04: 信用卡填充
+      case 'FILL_CARD': {
+        const cards = await autoFill.handleFillCardRequest();
+        return { ok: true, data: cards };
+      }
+
       case 'SAVE_DETECTED': {
         const result = await autoSave.handleSaveDetected(
           message.domain,

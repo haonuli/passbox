@@ -2,11 +2,17 @@
  * Vault 缓存管理
  *
  * 负责登录、解密 vault 数据、缓存管理、锁定。
+ *
+ * H1 修复：symmetricKey 不再导出为 base64 持久化到 chrome.storage.session。
+ * 改为保留在 service worker 模块级内存变量中。
+ * - 解密后的 items/vaults 仍缓存在 storage.session 中（自动填充需要）
+ * - symmetricKey 仅内存保留，SW 休眠或浏览器关闭后即丢失
+ * - 自动保存场景需要 symmetricKey；若内存已清空则要求重新解锁
  */
 import * as api from '../lib/api';
 import * as crypto from '../lib/crypto';
 import * as storage from '../lib/storage';
-import type { VaultItem, Vault } from '../types';
+import type { VaultItem, Vault, FillIdentity, FillCard } from '../types';
 
 /** item type code 映射（从 item_type_id 到 code） */
 const ITEM_TYPE_CODE_MAP: Record<number, string> = {
@@ -28,6 +34,15 @@ const ITEM_TYPE_CODE_MAP: Record<number, string> = {
   16: 'reward_program',
 };
 
+/**
+ * Symmetric Key 内存缓存（H1 修复）
+ *
+ * 仅保留在 service worker 模块作用域，SW 被销毁或浏览器关闭后即丢失。
+ * 不再使用 chrome.storage.session 持久化 base64 字符串形式。
+ * extractable=false 的 CryptoKey 无法被 exportKey 序列化。
+ */
+let symmetricKeyInMemory: CryptoKey | null = null;
+
 /** 从 URL 字符串中提取域名 */
 function extractDomain(url: string): string {
   try {
@@ -38,7 +53,11 @@ function extractDomain(url: string): string {
   }
 }
 
-/** 解密 vault 数据并缓存 */
+/** 解密 vault 数据并缓存
+ *
+ * H1 修复：symmetricKey 仅保留在内存中，不再 export 为 base64。
+ * storage.session 只缓存解密后的 vaults/items 元数据（自动填充需要）。
+ */
 async function decryptAndCacheVault(
   symmetricKey: CryptoKey,
   masterKey: Uint8Array,
@@ -77,11 +96,10 @@ async function decryptAndCacheVault(
     });
   }
 
-  // 导出 symmetric key 为 base64 并缓存
-  const symmetricKeyBase64 = await crypto.exportSymmetricKey(symmetricKey);
+  // symmetricKey 仅保留在内存，不再 export 为 base64
+  symmetricKeyInMemory = symmetricKey;
 
   await storage.setCache({
-    symmetricKeyBase64,
     vaults,
     items,
     lastUnlockAt: Date.now(),
@@ -146,10 +164,37 @@ export async function unlockAndCache(masterPassword: string): Promise<void> {
 
 /**
  * 锁定保险库
+ *
+ * H1 修复：清空内存中的 symmetricKey + storage.session 缓存。
  */
 export async function lock(): Promise<void> {
+  symmetricKeyInMemory = null;
   await storage.clearCache();
   await storage.setStatus('locked');
+}
+
+/**
+ * 检查 symmetricKey 是否仍在内存中（SW 未休眠）。
+ *
+ * 自动填充仅需 cache.items（已解密），无需 symmetricKey。
+ * 自动保存需要 symmetricKey 重新加密，若丢失则要求用户重新解锁。
+ */
+export function hasSymmetricKey(): boolean {
+  return symmetricKeyInMemory !== null;
+}
+
+/**
+ * 检查自动锁定并在触发时清空内存中的 symmetricKey。
+ *
+ * 包装 storage.checkAutoLock 以确保自动锁定场景下内存密钥也被清空，
+ * 避免 SW 仍存活但用户已 30 分钟未活动时密钥继续驻留内存。
+ */
+async function checkAutoLockAndClearKey(): Promise<boolean> {
+  const triggered = await storage.checkAutoLock();
+  if (triggered) {
+    symmetricKeyInMemory = null;
+  }
+  return triggered;
 }
 
 /**
@@ -157,7 +202,7 @@ export async function lock(): Promise<void> {
  */
 export async function getItems(query?: string): Promise<VaultItem[]> {
   // 1. 检查自动锁定
-  await storage.checkAutoLock();
+  await checkAutoLockAndClearKey();
 
   // 2. 获取缓存
   const cache = await storage.getCache();
@@ -207,24 +252,85 @@ export async function findItemsByDomain(domain: string): Promise<VaultItem[]> {
   });
 }
 
+/**
+ * 获取所有身份信息条目（用于自动填充）
+ *
+ * 不与特定网站绑定，返回全部 identity 类型条目。
+ */
+export async function findAllIdentities(): Promise<FillIdentity[]> {
+  await checkAutoLockAndClearKey();
+  const cache = await storage.getCache();
+  if (!cache) {
+    return [];
+  }
+
+  return cache.items
+    .filter((item) => item.itemTypeCode === 'identity')
+    .map((item) => ({
+      id: item.id,
+      title: item.title,
+      firstName: item.data.firstName ?? '',
+      lastName: item.data.lastName ?? '',
+      address: item.data.address ?? '',
+      city: item.data.city ?? '',
+      state: item.data.state ?? '',
+      zip: item.data.zip ?? '',
+      country: item.data.country ?? '',
+      phone: item.data.phone ?? '',
+      email: item.data.email ?? '',
+    }));
+}
+
+/**
+ * 获取所有信用卡条目（用于自动填充）
+ *
+ * 不与特定网站绑定，返回全部 credit_card 类型条目。
+ */
+export async function findAllCards(): Promise<FillCard[]> {
+  await checkAutoLockAndClearKey();
+  const cache = await storage.getCache();
+  if (!cache) {
+    return [];
+  }
+
+  return cache.items
+    .filter((item) => item.itemTypeCode === 'credit_card')
+    .map((item) => ({
+      id: item.id,
+      title: item.title,
+      cardholder: item.data.cardholder ?? '',
+      cardNumber: item.data.cardNumber ?? '',
+      expiry: item.data.expiry ?? '',
+      cvv: item.data.cvv ?? '',
+    }));
+}
+
 /** saveItem 操作结果 */
 export type SaveItemResult = 'saved' | 'updated' | 'ignored';
 
 /**
  * 保存条目（新增或更新）
+ *
+ * H1 修复：使用内存中的 symmetricKey（不再从 storage 读取 base64 重新 import）。
+ * 若 SW 休眠导致内存 symmetricKey 丢失，抛出错误要求用户重新解锁。
  */
 export async function saveItem(
   domain: string,
   username: string,
   password: string,
 ): Promise<SaveItemResult> {
-  // 1. 获取缓存
+  // 1. 检查 symmetricKey 是否仍在内存
+  if (!symmetricKeyInMemory) {
+    throw new Error('保险库已锁定，请重新解锁后再保存');
+  }
+
+  // 2. 获取缓存
   const cache = await storage.getCache();
   if (!cache) {
     throw new Error('保险库未解锁');
   }
 
-  // 2. 检查该域名下是否已有相同 username 的条目
+  // 3. 检查该域名下是否已有相同 username 的条目
   const existing = cache.items.find((item) => {
     if (item.itemTypeCode !== 'login') return false;
     if (!item.data.url) return false;
@@ -233,16 +339,16 @@ export async function saveItem(
       item.data.username === username;
   });
 
-  // 导入 symmetric key 用于加密
-  const symmetricKey = await crypto.importSymmetricKey(cache.symmetricKeyBase64);
+  // 使用内存中的 symmetricKey 加密
+  const symmetricKey = symmetricKeyInMemory;
 
   if (existing) {
-    // 3. 已存在且密码相同 -> 不操作
+    // 4. 已存在且密码相同 -> 不操作
     if (existing.data.password === password) {
       return 'ignored';
     }
 
-    // 4. 已存在但密码不同 -> 加密更新数据
+    // 5. 已存在但密码不同 -> 加密更新数据
     const newData = { ...existing.data, url: domain, username, password };
     const titleEncrypted = await crypto.encrypt(symmetricKey, existing.title, `item:${existing.id}:title`);
     const dataEncrypted = await crypto.encrypt(
@@ -260,7 +366,7 @@ export async function saveItem(
     return 'updated';
   }
 
-  // 5. 不存在 -> 创建新条目
+  // 6. 不存在 -> 创建新条目
   const itemId = globalThis.crypto.randomUUID();
   const title = domain;
   const data = { url: domain, username, password };
@@ -284,7 +390,7 @@ export async function saveItem(
     tagIds: [],
   });
 
-  // 6. 更新缓存中的 items 列表
+  // 7. 更新缓存中的 items 列表
   cache.items.push({
     id: itemId,
     vaultId: cache.vaults[0].id,

@@ -101,6 +101,10 @@ export async function deriveAuthHash(
 
 /**
  * 解密 Symmetric Key
+ *
+ * H1 修复：返回的 CryptoKey 设置 extractable=false，
+ * 阻止后续调用 exportKey() 将密钥序列化为可存储字符串。
+ * 密钥仅保留在 service worker 内存中，浏览器关闭后随内存释放。
  */
 export async function decryptSymmetricKey(
   masterKey: Uint8Array,
@@ -122,24 +126,9 @@ export async function decryptSymmetricKey(
     'raw',
     rawKey,
     { name: 'AES-GCM' },
-    true,
+    false, // ⚠️ extractable=false，禁止后续 exportKey
     ['encrypt', 'decrypt'],
   );
-}
-
-/** 导出 Symmetric Key 为 base64（用于存储） */
-export async function exportSymmetricKey(key: CryptoKey): Promise<string> {
-  const raw = await crypto.subtle.exportKey('raw', key);
-  return toBase64(new Uint8Array(raw));
-}
-
-/** 从 base64 导入 Symmetric Key */
-export function importSymmetricKey(base64Key: string): Promise<CryptoKey> {
-  const raw = fromBase64(base64Key);
-  return crypto.subtle.importKey('raw', buf(raw), { name: 'AES-GCM' }, true, [
-    'encrypt',
-    'decrypt',
-  ]);
 }
 
 /**

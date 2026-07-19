@@ -1,7 +1,9 @@
 /**
- * 图标注入模块
+ * 图标注入与浮层工厂模块
+ *
+ * - injectIcon: 在任意 input 字段右侧注入 PassBox 图标按钮（通用化）
+ * - createSelectionOverlay: 通用选择浮层工厂，接受 OverlayItem[] 列表
  */
-
 /** PassBox Logo SVG（内联） */
 const PASSBOX_ICON_SVG = `
 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -13,16 +15,16 @@ const PASSBOX_ICON_SVG = `
 const ICON_ATTR = 'data-passbox-icon-injected';
 
 /**
- * 在 password 字段右侧注入图标按钮
+ * 在任意 input 字段右侧注入图标按钮
  *
- * 点击触发 onClick 回调。
+ * 点击触发 onClick 回调。重复调用同一字段会跳过。
  */
-export function injectIcon(passwordField: HTMLInputElement, onClick: () => void): void {
+export function injectIcon(field: HTMLInputElement, onClick: () => void): void {
   // 避免重复注入
-  if (passwordField.hasAttribute(ICON_ATTR)) return;
-  passwordField.setAttribute(ICON_ATTR, 'true');
+  if (field.hasAttribute(ICON_ATTR)) return;
+  field.setAttribute(ICON_ATTR, 'true');
 
-  const wrapper = passwordField.parentElement;
+  const wrapper = field.parentElement;
   if (!wrapper) return;
 
   // 确保 wrapper 是 positioned 元素
@@ -34,6 +36,7 @@ export function injectIcon(passwordField: HTMLInputElement, onClick: () => void)
   const btn = document.createElement('button');
   btn.type = 'button';
   btn.title = 'PassBox 自动填充';
+  btn.setAttribute('aria-label', 'PassBox 自动填充');
   btn.innerHTML = PASSBOX_ICON_SVG;
   btn.style.cssText = [
     'position: absolute',
@@ -70,13 +73,24 @@ export function injectIcon(passwordField: HTMLInputElement, onClick: () => void)
   wrapper.appendChild(btn);
 }
 
+/** 选择浮层单项 */
+export interface OverlayItem {
+  /** 主标题（如用户名、持卡人姓名、条目标题） */
+  title: string;
+  /** 副标题（如条目标题、卡号末四位、邮箱） */
+  subtitle?: string;
+  /** 元信息（如 vault 名称、备注） */
+  meta?: string;
+}
+
 /**
- * 创建选择浮层（多个匹配时展示）
+ * 创建选择浮层（通用工厂）
  *
+ * 接受 OverlayItem[] 列表，渲染主标题 + 副标题 + 元信息三行布局。
  * 返回浮层元素，由调用者决定插入位置。
  */
 export function createSelectionOverlay(
-  items: { username: string; title: string }[],
+  items: OverlayItem[],
   onSelect: (index: number) => void,
 ): HTMLElement {
   const overlay = document.createElement('div');
@@ -105,15 +119,24 @@ export function createSelectionOverlay(
     ].join(';');
 
     const titleEl = document.createElement('div');
-    titleEl.textContent = item.username || item.title;
+    titleEl.textContent = item.title;
     titleEl.style.fontWeight = '500';
 
-    const subtitleEl = document.createElement('div');
-    subtitleEl.textContent = item.title;
-    subtitleEl.style.cssText = 'font-size: 11px; color: #6b7280; margin-top: 2px;';
-
     option.appendChild(titleEl);
-    option.appendChild(subtitleEl);
+
+    if (item.subtitle) {
+      const subtitleEl = document.createElement('div');
+      subtitleEl.textContent = item.subtitle;
+      subtitleEl.style.cssText = 'font-size: 11px; color: #6b7280; margin-top: 2px;';
+      option.appendChild(subtitleEl);
+    }
+
+    if (item.meta) {
+      const metaEl = document.createElement('div');
+      metaEl.textContent = item.meta;
+      metaEl.style.cssText = 'font-size: 10px; color: #9ca3af; margin-top: 2px;';
+      option.appendChild(metaEl);
+    }
 
     option.addEventListener('mouseenter', () => {
       option.style.backgroundColor = '#f0f0f0';
@@ -132,4 +155,31 @@ export function createSelectionOverlay(
   });
 
   return overlay;
+}
+
+/**
+ * 定位浮层到指定字段下方
+ *
+ * 浮层使用 fixed 定位，避免被父容器 overflow 裁剪。
+ */
+export function positionOverlayBelowField(
+  overlay: HTMLElement,
+  field: HTMLInputElement,
+): void {
+  const rect = field.getBoundingClientRect();
+  overlay.style.position = 'fixed';
+  overlay.style.top = `${rect.bottom + 4}px`;
+  overlay.style.left = `${rect.left}px`;
+  document.body.appendChild(overlay);
+
+  // 点击页面其他区域时关闭浮层
+  setTimeout(() => {
+    const onOutsideClick = (e: MouseEvent) => {
+      if (!overlay.contains(e.target as Node)) {
+        overlay.remove();
+        document.removeEventListener('click', onOutsideClick, true);
+      }
+    };
+    document.addEventListener('click', onOutsideClick, true);
+  }, 0);
 }
