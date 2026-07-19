@@ -10,21 +10,31 @@ import { useEffect, useState, useCallback } from 'react';
 
 /** 在线状态 Hook */
 export function useOnlineStatus(): boolean {
-  // lazy initializer 避免 effect 内 setState（SSR 安全：服务器上 navigator 不存在时默认 true）
-  const [online, setOnline] = useState(() =>
-    typeof navigator !== 'undefined' ? navigator.onLine : true,
-  );
+  // ⚠️ 初始值必须与 SSR 渲染保持一致（true），避免 hydration mismatch
+  // 否则 React 会因客户端初始 state 与 SSR 不一致而放弃 hydrate 该子树，
+  // 导致后续 setState 无法反映到 DOM（"幽灵 DOM 节点"问题）。
+  // 真实在线状态由下方 useEffect 主动同步。
+  const [online, setOnline] = useState(true);
 
   useEffect(() => {
+    // mount 后立即同步真实在线状态
+    setOnline(navigator.onLine);
+
     const handleOnline = () => setOnline(true);
     const handleOffline = () => setOnline(false);
 
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
 
+    // 兜底：定期同步（每 5s）防止某些环境下事件丢失
+    const interval = window.setInterval(() => {
+      setOnline(navigator.onLine);
+    }, 5000);
+
     return () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
+      window.clearInterval(interval);
     };
   }, []);
 
