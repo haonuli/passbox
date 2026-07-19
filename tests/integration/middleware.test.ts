@@ -135,7 +135,10 @@ describe('T1.6 middleware 集成测试', () => {
 
     it("CSP 包含 script-src 'self' 'wasm-unsafe-eval'", async () => {
       const csp = (await getCsp()).get('Content-Security-Policy') ?? '';
-      expect(csp).toContain("script-src 'self' 'wasm-unsafe-eval'");
+      // M-1 修复：CSP 使用 nonce 替代 'unsafe-inline'，script-src 形如
+      // `script-src 'self' 'nonce-xxx' 'wasm-unsafe-eval'`
+      // 检查关键 token 而非连续子串（nonce 是动态的）
+      expect(csp).toMatch(/script-src 'self' 'nonce-[^']+' 'wasm-unsafe-eval'/);
     });
 
     it("CSP 包含 frame-ancestors 'none'", async () => {

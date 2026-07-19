@@ -65,6 +65,8 @@ export interface ItemRow {
   is_favorite: boolean;
   created_at: string;
   updated_at: string;
+  /** 软删除时间戳（NULL=未删除，非 NULL=已移入回收站） */
+  deleted_at: string | null;
 }
 
 /**

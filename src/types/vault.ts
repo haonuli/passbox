@@ -137,6 +137,8 @@ export interface DecryptedItem {
   isFavorite: boolean;
   createdAt: string;
   updatedAt: string;
+  /** 软删除时间戳（null=未删除，非空=已移入回收站） */
+  deletedAt: string | null;
   /** 关联的标签 ID 列表 */
   tagIds: string[];
 }

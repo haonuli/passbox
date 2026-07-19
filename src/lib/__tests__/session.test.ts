@@ -67,14 +67,14 @@ describe('会话管理模块', () => {
       expect(payload.ver).toBe(3);
     });
 
-    it('JWT 过期时间应为 30 天（exp - iat ≈ 30*24*3600）', async () => {
+    it('JWT 过期时间应为 24 小时（exp - iat ≈ 24*3600）', async () => {
       const token = await createSession(TEST_USER_ID, TEST_EMAIL, 0);
       const payload = decodeJwt(token);
       expect(payload.exp).toBeDefined();
       expect(payload.iat).toBeDefined();
       const delta = (payload.exp as number) - (payload.iat as number);
       expect(delta).toBe(SESSION_MAX_AGE_SECONDS);
-      expect(delta).toBe(30 * 24 * 3600);
+      expect(delta).toBe(24 * 3600);
     });
 
     it('不同 userId 签发不同 JWT', async () => {
@@ -152,12 +152,12 @@ describe('会话管理模块', () => {
       expect(SESSION_COOKIE_OPTIONS.httpOnly).toBe(true);
       expect(SESSION_COOKIE_OPTIONS.secure).toBe(true);
       expect(SESSION_COOKIE_OPTIONS.sameSite).toBe('lax');
-      expect(SESSION_COOKIE_OPTIONS.maxAge).toBe(30 * 24 * 3600);
+      expect(SESSION_COOKIE_OPTIONS.maxAge).toBe(24 * 3600);
       expect(SESSION_COOKIE_OPTIONS.path).toBe('/');
     });
 
-    it('SESSION_MAX_AGE_SECONDS 应为 30 天秒数', () => {
-      expect(SESSION_MAX_AGE_SECONDS).toBe(30 * 24 * 3600);
+    it('SESSION_MAX_AGE_SECONDS 应为 24 小时秒数', () => {
+      expect(SESSION_MAX_AGE_SECONDS).toBe(24 * 3600);
     });
   });
 

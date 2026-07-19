@@ -267,6 +267,15 @@ export interface ApiErrorResponse {
 // ============================================================
 
 /**
+ * 条目-标签关联（密文无关，仅关联 ID）。
+ * 用于客户端构建 itemId → tagIds 映射，支持按标签筛选。
+ */
+export interface ItemTagRelation {
+  itemId: string;
+  tagId: string;
+}
+
+/**
  * 获取当前用户所有保险库 + 条目（密文）
  * @see TECHNICAL_DESIGN.md 5.3
  */
@@ -274,6 +283,8 @@ export interface VaultData {
   vaults: VaultRow[];
   items: ItemRow[];
   tags: TagRow[];
+  /** item_tags 关联记录，用于客户端按标签筛选 */
+  itemTags: ItemTagRelation[];
 }
 
 /**

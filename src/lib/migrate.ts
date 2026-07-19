@@ -65,6 +65,10 @@ const DDL_SCRIPTS: string[] = [
   `ALTER TABLE users ADD COLUMN IF NOT EXISTS travel_mode BOOLEAN NOT NULL DEFAULT FALSE;`,
   `ALTER TABLE vaults ADD COLUMN IF NOT EXISTS travel_safe BOOLEAN NOT NULL DEFAULT FALSE;`,
 
+  // 回收站：items.deleted_at 软删除时间戳（NULL=未删除，非 NULL=已移入回收站）
+  // 超过 30 天的回收站条目由 lazy purge 物理清理
+  `ALTER TABLE items ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;`,
+
   // SRP 认证协议：在 users 表补充 srp_salt 与 srp_verifier 列
   // 注册时由服务端生成，登录时用于 SRP 握手验证（替换 authHash 直接传输）
   `ALTER TABLE users ADD COLUMN IF NOT EXISTS srp_salt TEXT;`,
@@ -119,9 +123,10 @@ const DDL_SCRIPTS: string[] = [
 
   // 8. srp_sessions（SRP 登录握手临时会话，5 分钟过期，验证后删除）
   // 存储 SRP 握手过程中服务端的临时密钥，适配 serverless 多实例部署
+  // user_id 类型必须与 users.id (UUID) 一致，否则外键约束失败
   `CREATE TABLE IF NOT EXISTS srp_sessions (
     id                      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id                 TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    user_id                 UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     client_public_ephemeral TEXT NOT NULL,
     server_secret_ephemeral TEXT NOT NULL,
     expires_at              TIMESTAMPTZ NOT NULL DEFAULT NOW() + INTERVAL '5 minutes',
@@ -130,9 +135,10 @@ const DDL_SCRIPTS: string[] = [
   `CREATE INDEX IF NOT EXISTS idx_srp_sessions_expires ON srp_sessions (expires_at);`,
 
   // 9. shared_items（安全共享链接）
+  // user_id 类型必须与 users.id (UUID) 一致
   `CREATE TABLE IF NOT EXISTS shared_items (
     id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id               TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    user_id               UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     item_title_encrypted  TEXT NOT NULL,
     item_data_encrypted   TEXT NOT NULL,
     item_type_code        TEXT NOT NULL,
@@ -143,20 +149,22 @@ const DDL_SCRIPTS: string[] = [
   );`,
 
   // 10. item_history（条目历史版本，更新前快照）
+  // item_id/user_id 类型必须与 items.id/users.id (UUID) 一致
   `CREATE TABLE IF NOT EXISTS item_history (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    item_id         TEXT NOT NULL REFERENCES items(id) ON DELETE CASCADE,
-    user_id         TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    item_id         UUID NOT NULL REFERENCES items(id) ON DELETE CASCADE,
+    user_id         UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     title_encrypted TEXT NOT NULL,
     data_encrypted  TEXT NOT NULL,
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
   );`,
 
   // 11. item_attachments（条目附件，加密存储）
+  // item_id/user_id 类型必须与 items.id/users.id (UUID) 一致
   `CREATE TABLE IF NOT EXISTS item_attachments (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    item_id         TEXT NOT NULL REFERENCES items(id) ON DELETE CASCADE,
-    user_id         TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    item_id         UUID NOT NULL REFERENCES items(id) ON DELETE CASCADE,
+    user_id         UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     filename_encrypted   TEXT NOT NULL,
     mime_type_encrypted  TEXT NOT NULL,
     file_size       INTEGER NOT NULL,
@@ -170,6 +178,7 @@ const DDL_SCRIPTS: string[] = [
   `CREATE INDEX IF NOT EXISTS idx_items_vault_id ON items (vault_id);`,
   `CREATE INDEX IF NOT EXISTS idx_items_user_updated ON items (user_id, updated_at DESC);`,
   `CREATE INDEX IF NOT EXISTS idx_items_user_favorite ON items (user_id, is_favorite, updated_at DESC);`,
+  `CREATE INDEX IF NOT EXISTS idx_items_user_deleted ON items (user_id, deleted_at DESC);`,
   `CREATE INDEX IF NOT EXISTS idx_items_item_type ON items (item_type_id);`,
   `CREATE INDEX IF NOT EXISTS idx_tags_user_id ON tags (user_id);`,
   `CREATE INDEX IF NOT EXISTS idx_item_tags_tag_id ON item_tags (tag_id);`,
@@ -284,7 +293,7 @@ const isMainModule = process.argv[1] && resolve(process.argv[1]) === __filename;
 if (isMainModule) {
   runMigrations()
     .then(({ scriptsExecuted }) => {
-      console.log(`✅ 迁移完成：执行了 ${scriptsExecuted} 条 SQL 语句`);
+      console.error(`[migrate] ✅ 迁移完成：执行了 ${scriptsExecuted} 条 SQL 语句`);
       process.exit(0);
     })
     .catch((err) => {
