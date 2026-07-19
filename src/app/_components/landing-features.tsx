@@ -46,11 +46,11 @@ const FEATURE_GROUPS: FeatureGroup[] = [
     tag: '02',
     icon: KeyRound,
     title: '密码管理',
-    description: '覆盖全部密码管理场景，16 种条目类型满足个人与工作所需',
+    description: '覆盖全部密码管理场景，17 种条目类型满足个人与工作所需',
     features: [
       {
         icon: KeySquare,
-        title: '16 种条目类型',
+        title: '17 种条目类型',
         description: '登录、信用卡、身份、银行账户、API 密钥、SSH 密钥、加密钱包等，一站式管理。',
         highlight: true,
       },
@@ -237,7 +237,7 @@ export function LandingFeatures() {
         {/* 底部统计条 — 不使用 Fraunces，用 Geist 600 + 负字距 */}
         <div className="mt-24 grid grid-cols-2 gap-px overflow-hidden rounded-md border border-border bg-border lg:grid-cols-4">
           {[
-            { value: '16', label: '条目类型', sub: '覆盖全部场景' },
+            { value: '17', label: '条目类型', sub: '覆盖全部场景' },
             { value: '80', label: '位恢复码熵', sub: '银行级强度' },
             { value: '24h', label: '会话有效期', sub: '强制重认证' },
             { value: '0', label: '主密码上传', sub: 'SRP 保证' },

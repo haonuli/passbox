@@ -222,6 +222,8 @@ export function ItemForm({ mode, itemId }: ItemFormProps) {
         values[f.name] = (existingItem.data as Record<string, string | undefined>)[f.name] ?? '';
       }
       reset(values as FormValues);
+      // 修复 P1：编辑模式预填充已选标签，避免保存时 tagIds 被清空
+      setSelectedTagIds(existingItem.tagIds);
     }
   }, [mode, existingItem, reset, currentConfig]);
 
@@ -353,7 +355,8 @@ export function ItemForm({ mode, itemId }: ItemFormProps) {
               createdAt: result.data.created_at,
               updatedAt: result.data.updated_at,
               deletedAt: null,
-              tagIds: [],
+              // 修复 P1：保存 selectedTagIds 到 store，否则标签筛选会过滤掉本条目
+              tagIds: selectedTagIds,
             };
             upsertItem(newItem);
             toast.success('已保存');
@@ -378,6 +381,8 @@ export function ItemForm({ mode, itemId }: ItemFormProps) {
               title: values.title,
               data: payload,
               updatedAt: result.data.updated_at,
+              // 修复 P1：编辑时同步更新 tagIds，否则标签筛选会过滤掉本条目
+              tagIds: selectedTagIds,
             };
             upsertItem(updatedItem);
             toast.success('已保存');

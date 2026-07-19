@@ -35,8 +35,13 @@ import type { RegisterRequest, RegisterResponse } from '@/types/api';
 /** 注册流程状态（UX-013：derive/encrypt/submit 三阶段细化文案） */
 export type RegisterStatus = 'idle' | 'deriving' | 'encrypting' | 'submitting' | 'success' | 'error';
 
-/** 默认保险库名称（明文，注册时由客户端加密后上传） */
-const DEFAULT_VAULT_NAME = '个人保险库';
+/**
+ * 默认保险库名称（明文，注册时由客户端加密后上传）。
+ *
+ * 修复 P2：使用"主保险库"而非"个人保险库"，避免与用户在 UI 上创建保险库时
+ * 习惯性输入"个人保险库"造成重名混淆。
+ */
+const DEFAULT_VAULT_NAME = '主保险库';
 
 export interface UseRegisterReturn {
   status: RegisterStatus;

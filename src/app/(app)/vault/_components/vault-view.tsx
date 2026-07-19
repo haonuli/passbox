@@ -41,6 +41,8 @@ export function VaultView() {
   const scrollRef = useRef<HTMLDivElement>(null);
   // UX-036：首次使用引导（数据加载完成后显示）
   const [onboardingOpen, setOnboardingOpen] = useState(false);
+  // 修复 P3：标记是否已自动选中过首项，避免覆盖用户主动取消选中（如按 Escape）
+  const hasAutoSelected = useRef(false);
 
   // 数据加载完成后检查是否需要显示引导
   useEffect(() => {
@@ -60,9 +62,21 @@ export function VaultView() {
       const exists = items.some((i) => i.id === itemId);
       if (exists) {
         setSelectedItemId(itemId);
+        hasAutoSelected.current = true;
       }
     }
   }, [searchParams, items, loaded]);
+
+  // 修复 P3：数据加载完成且无 URL itemId 参数时，自动选中第一个条目
+  // 仅在首次加载或组件重新挂载时触发一次，避免覆盖用户主动取消选中
+  useEffect(() => {
+    if (!loaded || hasAutoSelected.current) return;
+    if (items.length === 0) return;
+    // URL 已指定 itemId 时由上一个 useEffect 处理
+    if (searchParams.get('itemId')) return;
+    setSelectedItemId(items[0].id);
+    hasAutoSelected.current = true;
+  }, [loaded, items, searchParams]);
 
   // 加载密码库数据
   useEffect(() => {

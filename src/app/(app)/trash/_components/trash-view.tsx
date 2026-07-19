@@ -27,6 +27,7 @@ import { decrypt } from '@/lib/crypto/aes';
 import type { EncryptedData } from '@/types/crypto';
 import { getItemTypeConfig } from '@/lib/item-types';
 import { useAuthStore } from '@/stores/auth-store';
+import { useVaultStore } from '@/stores/vault-store';
 import {
   listTrashItems,
   restoreItem,
@@ -145,9 +146,8 @@ export function TrashView() {
       }
       setItems((prev) => prev.filter((it) => it.id !== itemId));
       toast.success('已恢复到原保险库');
-      // 重新加载 vault 数据以同步列表（恢复的条目需重新出现在密码库中）
-      // 注意：完整重载由 vault-view 的路由刷新或用户切换触发
-      // 此处仅从回收站列表移除，避免重复拉取
+      // 修复 P1：通知 vault-store 重新拉取数据，确保用户切回 /vault 时看到恢复的条目
+      useVaultStore.getState().requestReload();
     } catch {
       toast.error('恢复失败，请稍后重试');
     } finally {

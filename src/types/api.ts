@@ -63,7 +63,7 @@ export interface RegisterRequest {
    */
   recoveryEncryptedKey: EncryptedData;
   /**
-   * 默认保险库名称密文（客户端用 Symmetric Key 加密，如 "个人保险库"）。
+   * 默认保险库名称密文（客户端用 Symmetric Key 加密，如 "主保险库"）。
    * 零知识架构下服务端无法加密，必须由客户端提供。
    */
   defaultVaultNameEncrypted: EncryptedData;

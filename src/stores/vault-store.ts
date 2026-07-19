@@ -54,6 +54,7 @@ const ITEM_TYPE_CODE_MAP: Record<number, string> = {
   14: 'passport',
   15: 'membership',
   16: 'reward_program',
+  17: 'ssh_key',
 };
 
 /** 保险库名称解密 AAD */
@@ -147,6 +148,14 @@ export interface VaultStore {
    * 清空所有缓存（锁定时调用）。
    */
   clear: () => void;
+
+  /**
+   * 修复 P1：请求重新拉取密码库数据（不清空现有缓存，避免 UI 闪烁）。
+   *
+   * 用于跨页面操作（如回收站恢复条目）后通知 vault-view 重新拉取数据。
+   * vault-view 的数据加载 useEffect 监听 loaded 字段，loaded=false 时会触发重载。
+   */
+  requestReload: () => void;
 
   /**
    * M5 修复：清空指定条目的敏感数据（data 字段），减少内存中明文密码暴露窗口。
@@ -405,6 +414,14 @@ export const useVaultStore = create<VaultStore>((set, get) => ({
       loaded: false,
       loading: false,
       searchQuery: '',
+    }),
+
+  requestReload: () =>
+    set({
+      // 仅重置 loaded 标志，保留现有数据避免 UI 闪烁。
+      // vault-view 的 useEffect 监听 loaded，会自动触发 getVaultData() 重新拉取并覆盖。
+      loaded: false,
+      loading: false,
     }),
 
   lockItemData: (itemId) =>

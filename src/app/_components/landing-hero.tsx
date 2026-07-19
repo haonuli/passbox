@@ -22,7 +22,7 @@ const TICKER_ITEMS = [
   '24h Session',
   'token_version Revocation',
   'Rate Limited',
-  '16 Item Types',
+  '17 Item Types',
   'PWA Offline',
 ];
 
