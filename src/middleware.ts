@@ -106,7 +106,7 @@ function isProtectedPath(pathname: string): boolean {
 
 export async function middleware(request: NextRequest): Promise<NextResponse> {
   const nonce = Buffer.from(crypto.randomUUID()).toString('base64');
-  const { pathname } = request.nextUrl;
+  const { pathname, searchParams } = request.nextUrl;
 
   // 公开页面：直接放行（仍注入安全头）
   if (PUBLIC_PATHS.has(pathname)) {
@@ -122,6 +122,21 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
   const sessionToken = request.cookies.get(SESSION_COOKIE_NAME)?.value;
   const session = await verifySession(sessionToken);
   const isAuthenticated = session !== null;
+
+  // 防重定向循环：JWT 签名有效但 token_version 已失效（登出/改密后）的场景
+  // (app)/layout.tsx 会 redirect 到 /login?session=invalid，此处检测该参数并：
+  // 1. 清除已失效的 session cookie
+  // 2. 放行到 /login 页面（不再因"已认证访问 (auth) 路由"重定向回 /vault）
+  if (searchParams.get('session') === 'invalid' && AUTH_PATHS.has(pathname)) {
+    const response = NextResponse.next({
+      request: { headers: new Headers(request.headers) },
+    });
+    response.headers.set('x-nonce', nonce);
+    applySecurityHeaders(response, nonce);
+    // 清除已失效的 cookie，避免再次进入循环
+    response.cookies.delete(SESSION_COOKIE_NAME);
+    return response;
+  }
 
   // 已认证用户访问 (auth) 路由 → 重定向到 /vault
   if (isAuthenticated && AUTH_PATHS.has(pathname)) {
