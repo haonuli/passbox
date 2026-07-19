@@ -1,5 +1,5 @@
 /**
- * 应用顶栏 (T4.3 / T4.7)
+ * 应用顶栏 (T4.3 / T4.7 / UX-001)
  *
  * 包含：
  * - 移动端侧边栏切换按钮（hamburger）
@@ -9,10 +9,11 @@
  * - 退出登录
  * - 主题切换
  * - 用户邮箱展示
+ * - 全局快捷键（UX-001）：⌘K 搜索 / ⌘N 新建 / ⌘L 锁定 / ⌘/ 速查表
  */
 'use client';
 
-import { useCallback, useDeferredValue, useRef, useEffect, useState } from 'react';
+import { useCallback, useEffect, useDeferredValue, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Menu, Lock, LogOut, Search, X, BookmarkPlus } from 'lucide-react';
 import { toast } from 'sonner';
@@ -28,6 +29,8 @@ import {
 } from '@/components/ui/dialog';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { useLock } from '@/hooks/use-lock';
+import { useHotkey } from '@/hooks/use-hotkey';
+import { KeyboardShortcutsDialog } from '@/components/keyboard-shortcuts-dialog';
 import { useAuthStore } from '@/stores/auth-store';
 import { useVaultStore } from '@/stores/vault-store';
 import { useSavedSearchStore } from '@/stores/saved-search-store';
@@ -45,22 +48,58 @@ export function AppHeader({ onOpenSidebar }: AppHeaderProps) {
   const loaded = useVaultStore((s) => s.loaded);
   const addSearch = useSavedSearchStore((s) => s.addSearch);
   const searchRef = useRef<HTMLInputElement>(null);
+  const searchDebounceRef = useRef<number | null>(null);
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const [searchName, setSearchName] = useState('');
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  // UX-046：本地输入值，立即响应；store 更新防抖
+  const [inputValue, setInputValue] = useState(searchQuery);
 
   const deferredQuery = useDeferredValue(searchQuery);
 
-  // ⌘K 快捷键聚焦搜索框
+  // 外部清空搜索时同步本地输入框（render-time setState，替代 effect）
+  // 参考：https://react.dev/learn/you-might-not-need-an-effect#adjusting-some-state-when-a-prop-changes
+  const [prevSearchQuery, setPrevSearchQuery] = useState(searchQuery);
+  if (searchQuery !== prevSearchQuery) {
+    setPrevSearchQuery(searchQuery);
+    if (searchQuery !== inputValue) {
+      setInputValue(searchQuery);
+    }
+  }
+
+  // UX-046：组件卸载时清理防抖定时器
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
-        e.preventDefault();
-        searchRef.current?.focus();
+    return () => {
+      if (searchDebounceRef.current !== null) {
+        window.clearTimeout(searchDebounceRef.current);
       }
     };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
+
+  // UX-001：全局快捷键
+  const focusSearch = useCallback(() => {
+    searchRef.current?.focus();
+  }, []);
+
+  const handleNew = useCallback(() => {
+    if (window.location.pathname !== '/vault') {
+      router.push('/vault');
+    }
+    router.push('/items/new');
+  }, [router]);
+
+  const handleLock = useCallback(() => {
+    lock();
+  }, [lock]);
+
+  const openShortcuts = useCallback(() => {
+    setShortcutsOpen(true);
+  }, []);
+
+  useHotkey('mod+k', focusSearch);
+  useHotkey('mod+n', handleNew);
+  useHotkey('mod+l', handleLock);
+  useHotkey('mod+/', openShortcuts);
 
   const handleLogout = useCallback(async () => {
     try {
@@ -74,9 +113,27 @@ export function AppHeader({ onOpenSidebar }: AppHeaderProps) {
 
   const handleSearchChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
-      setSearchQuery(e.target.value);
-      if (e.target.value && window.location.pathname !== '/vault') {
+      const value = e.target.value;
+      // UX-046：本地输入立即响应，store 更新防抖 200ms
+      setInputValue(value);
+      if (searchDebounceRef.current !== null) {
+        window.clearTimeout(searchDebounceRef.current);
+      }
+      searchDebounceRef.current = window.setTimeout(() => {
+        setSearchQuery(value);
+      }, 200);
+      if (value && window.location.pathname !== '/vault') {
         router.push('/vault');
+        // UX-025：跳转后重新聚焦搜索框，避免焦点丢失
+        requestAnimationFrame(() => {
+          const el = searchRef.current;
+          if (el) {
+            el.focus();
+            // 将光标移到末尾
+            const len = el.value.length;
+            el.setSelectionRange(len, len);
+          }
+        });
       }
     },
     [setSearchQuery, router],
@@ -84,6 +141,11 @@ export function AppHeader({ onOpenSidebar }: AppHeaderProps) {
 
   const handleClearSearch = useCallback(() => {
     setSearchQuery('');
+    setInputValue('');
+    if (searchDebounceRef.current !== null) {
+      window.clearTimeout(searchDebounceRef.current);
+      searchDebounceRef.current = null;
+    }
     searchRef.current?.focus();
   }, [setSearchQuery]);
 
@@ -102,7 +164,7 @@ export function AppHeader({ onOpenSidebar }: AppHeaderProps) {
   }, [searchName, deferredQuery, addSearch]);
 
   return (
-    <header className="flex h-14 items-center gap-3 border-b border-border px-4">
+    <header className="flex h-16 items-center gap-3 border-b border-border bg-background/80 px-4 backdrop-blur-md">
       {/* 移动端菜单按钮 */}
       <Button
         size="icon"
@@ -122,7 +184,7 @@ export function AppHeader({ onOpenSidebar }: AppHeaderProps) {
           type="search"
           placeholder="搜索条目…"
           className="pl-9 pr-16"
-          value={deferredQuery}
+          value={inputValue}
           onChange={handleSearchChange}
           disabled={!loaded}
         />
@@ -136,7 +198,7 @@ export function AppHeader({ onOpenSidebar }: AppHeaderProps) {
             <X className="h-4 w-4" />
           </button>
         ) : (
-          <kbd className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 hidden select-none items-center gap-0.5 rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground sm:flex">
+          <kbd className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 hidden select-none items-center gap-0.5 rounded-xs border border-border bg-secondary px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground sm:flex">
             ⌘K
           </kbd>
         )}
@@ -199,6 +261,9 @@ export function AppHeader({ onOpenSidebar }: AppHeaderProps) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* 键盘快捷键速查表（UX-001） */}
+      <KeyboardShortcutsDialog open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
     </header>
   );
 }
