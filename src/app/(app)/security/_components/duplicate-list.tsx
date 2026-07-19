@@ -29,7 +29,7 @@ export function DuplicateList({ duplicates, loading }: DuplicateListProps) {
   if (duplicates.length === 0) {
     return (
       <div className="flex items-center gap-2 p-4">
-        <CheckCircle2 className="h-5 w-5 text-green-500" />
+        <CheckCircle2 className="h-5 w-5 text-success" />
         <span className="text-sm">未发现重复密码</span>
       </div>
     );
@@ -40,13 +40,13 @@ export function DuplicateList({ duplicates, loading }: DuplicateListProps) {
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-2 px-1 text-sm text-muted-foreground">
-        <AlertTriangle className="h-4 w-4 text-yellow-500" />
+        <AlertTriangle className="h-4 w-4 text-warning" />
         发现 {duplicates.length} 组重复密码（涉及 {totalDuplicates} 个条目）
       </div>
       {duplicates.map((group) => (
         <div
           key={group.hashPrefix}
-          className="rounded-md border border-yellow-500/30 bg-yellow-500/5 p-3"
+          className="rounded-md border border-warning/30 bg-warning/5 p-3"
         >
           <div className="mb-2 text-xs font-medium text-muted-foreground">
             重复密码 #{group.hashPrefix}
@@ -56,7 +56,7 @@ export function DuplicateList({ duplicates, loading }: DuplicateListProps) {
               <Link
                 key={item.id}
                 href={`/items/${item.id}/edit`}
-                className="flex items-center gap-2 rounded p-1.5 text-sm hover:bg-muted/50"
+                className="flex items-center gap-2 rounded-sm p-1.5 text-sm hover:bg-muted/50"
               >
                 <span className="truncate">{item.title}</span>
                 {item.data.username && (

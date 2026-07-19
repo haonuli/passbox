@@ -141,3 +141,118 @@ export async function batchUpdateItems(
     return { ok: false, error: '批量更新失败，请稍后重试' };
   }
 }
+
+/**
+ * 批量删除条目（事务，软删除，移入回收站）。
+ *
+ * 与单条 deleteItem 一致：标记 deleted_at = NOW()，30 天内可恢复。
+ * 级联清理仅在 purgeItem/purgeAllItems 物理删除时生效（外键 ON DELETE CASCADE）。
+ *
+ * @param itemIds 待删除的条目 ID 列表
+ * @returns 成功软删除的数量
+ */
+export async function batchDeleteItems(
+  itemIds: string[],
+): Promise<ActionResult<{ deleted: number }>> {
+  try {
+    const session = await getVerifiedSession();
+    if (!session?.sub) {
+      return { ok: false, error: '未登录或会话已过期' };
+    }
+    const userId = session.sub;
+
+    if (itemIds.length === 0) {
+      return { ok: true, data: { deleted: 0 } };
+    }
+
+    const client = await db.connect();
+    try {
+      await client.query('BEGIN');
+
+      let deleted = 0;
+      for (const itemId of itemIds) {
+        const result = await client.query(
+          `UPDATE items SET deleted_at = NOW()
+           WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL`,
+          [itemId, userId],
+        );
+        if (result.rowCount && result.rowCount > 0) {
+          deleted++;
+        }
+      }
+
+      await client.query('COMMIT');
+      return { ok: true, data: { deleted } };
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
+  } catch (err) {
+    console.error('[batchDeleteItems] 批量删除失败:', err instanceof Error ? err.message : '未知错误');
+    return { ok: false, error: '批量删除失败，请稍后重试' };
+  }
+}
+
+/**
+ * 批量移动条目到目标保险库（事务）。
+ *
+ * @param itemIds 待移动的条目 ID 列表
+ * @param targetVaultId 目标保险库 ID
+ * @returns 成功移动的数量
+ */
+export async function batchMoveItems(
+  itemIds: string[],
+  targetVaultId: string,
+): Promise<ActionResult<{ moved: number }>> {
+  try {
+    const session = await getVerifiedSession();
+    if (!session?.sub) {
+      return { ok: false, error: '未登录或会话已过期' };
+    }
+    const userId = session.sub;
+
+    if (itemIds.length === 0) {
+      return { ok: true, data: { moved: 0 } };
+    }
+
+    const client = await db.connect();
+    try {
+      await client.query('BEGIN');
+
+      // 验证目标保险库属于当前用户
+      const vaultCheck = await client.query(
+        'SELECT id FROM vaults WHERE id = $1 AND user_id = $2',
+        [targetVaultId, userId],
+      );
+      if (vaultCheck.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return { ok: false, error: '目标保险库不存在' };
+      }
+
+      let moved = 0;
+      for (const itemId of itemIds) {
+        const result = await client.query(
+          `UPDATE items SET vault_id = $1, updated_at = NOW()
+           WHERE id = $2 AND user_id = $3 AND vault_id != $1`,
+          [targetVaultId, itemId, userId],
+        );
+        if (result.rowCount && result.rowCount > 0) {
+          moved++;
+        }
+      }
+
+      await client.query('COMMIT');
+      return { ok: true, data: { moved } };
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
+  } catch (err) {
+    console.error('[batchMoveItems] 批量移动失败:', err instanceof Error ? err.message : '未知错误');
+    return { ok: false, error: '批量移动失败，请稍后重试' };
+  }
+}

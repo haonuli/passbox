@@ -6,6 +6,8 @@
  *   - 剪贴板自动清除时间
  *
  * 配置通过 zustand persist 持久化到 localStorage（ADR-007）。
+ *
+ * UX-012：所有设置项变更即时保存 + toast 反馈；保存失败时回滚 UI 状态。
  */
 'use client';
 
@@ -28,14 +30,31 @@ export function PreferencesView() {
   const setClipboardClearSeconds = useSettingsStore((s) => s.setClipboardClearSeconds);
   const hasHydrated = useSettingsStore((s) => s._hasHydrated);
 
+  // UX-012：变更即时保存 + toast 反馈；localStorage 异常时回滚状态
   const handleLockTimeoutChange = (minutes: LockTimeoutMinutes) => {
-    setLockTimeoutMinutes(minutes);
-    toast.success(minutes === 0 ? '已设置为永不自动锁定' : `已设置为 ${minutes} 分钟后自动锁定`);
+    const prev = lockTimeoutMinutes;
+    try {
+      setLockTimeoutMinutes(minutes);
+      toast.success('设置已保存', {
+        description: minutes === 0 ? '已设置为永不自动锁定' : `已设置为 ${minutes} 分钟后自动锁定`,
+      });
+    } catch {
+      setLockTimeoutMinutes(prev);
+      toast.error('保存失败，请重试');
+    }
   };
 
   const handleClipboardClearChange = (seconds: ClipboardClearSeconds) => {
-    setClipboardClearSeconds(seconds);
-    toast.success(seconds === 0 ? '已设置为不自动清除' : `已设置为 ${seconds} 秒后自动清除`);
+    const prev = clipboardClearSeconds;
+    try {
+      setClipboardClearSeconds(seconds);
+      toast.success('设置已保存', {
+        description: seconds === 0 ? '已设置为不自动清除' : `已设置为 ${seconds} 秒后自动清除`,
+      });
+    } catch {
+      setClipboardClearSeconds(prev);
+      toast.error('保存失败，请重试');
+    }
   };
 
   return (

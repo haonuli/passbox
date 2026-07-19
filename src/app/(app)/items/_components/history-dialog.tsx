@@ -6,14 +6,15 @@
  */
 'use client';
 
-import { createElement } from 'react';
-import { History, Loader2, RotateCcw, Clock } from 'lucide-react';
+import { createElement, useState, useMemo } from 'react';
+import { History, Loader2, RotateCcw, Clock, GitCompareArrows } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
 import { getFieldIcon } from '@/lib/item-types';
 import { useItemHistory } from '@/hooks/use-item-history';
+import { useVaultStore } from '@/stores/vault-store';
 
 interface HistoryDialogProps {
   itemId: string;
@@ -36,6 +37,39 @@ export function HistoryDialog({ itemId, open, onOpenChange }: HistoryDialogProps
     versions, loading, selectedId, selectedVersion, decrypting,
     decryptedData, restoring, fields, handleSelect, handleRestore,
   } = useItemHistory(itemId, open, onOpenChange);
+
+  // UX-031：差异对比模式
+  const [diffMode, setDiffMode] = useState(false);
+  const currentItem = useVaultStore((s) => s.items.find((i) => i.id === itemId));
+
+  // 计算字段差异
+  const diffs = useMemo(() => {
+    if (!decryptedData || !currentItem) return null;
+    const oldData = decryptedData.fields;
+    const newData = currentItem.data as Record<string, string | undefined>;
+    const result: Array<{ key: string; label: string; oldValue?: string; newValue?: string; changed: boolean }> = [];
+    for (const field of fields) {
+      const oldValue = oldData[field.name];
+      const newValue = newData[field.name];
+      if (!oldValue && !newValue) continue;
+      result.push({
+        key: field.name,
+        label: field.label,
+        oldValue: oldValue || undefined,
+        newValue: newValue || undefined,
+        changed: oldValue !== newValue,
+      });
+    }
+    // 标题差异单独处理
+    return {
+      titleDiff: {
+        oldValue: decryptedData.title,
+        newValue: currentItem.title,
+        changed: decryptedData.title !== currentItem.title,
+      },
+      fields: result,
+    };
+  }, [decryptedData, currentItem, fields]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -79,13 +113,45 @@ export function HistoryDialog({ itemId, open, onOpenChange }: HistoryDialogProps
 
           {/* 右侧详情 */}
           <div className="flex-1 overflow-auto">
+            {/* UX-031：差异对比切换按钮 */}
+            {decryptedData && currentItem && (
+              <div className="mb-2 flex justify-end">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={diffMode ? 'default' : 'outline'}
+                  onClick={() => setDiffMode((v) => !v)}
+                  className="h-7 px-2 text-xs"
+                >
+                  <GitCompareArrows className="mr-1 h-3 w-3" />
+                  {diffMode ? '差异视图' : '完整视图'}
+                </Button>
+              </div>
+            )}
             {decrypting ? (
               <Spinner />
             ) : decryptedData && selectedVersion ? (
               <div className="space-y-3">
                 <div>
                   <div className="text-xs text-muted-foreground">标题</div>
-                  <div className="mt-0.5 break-all text-sm font-medium">{decryptedData.title}</div>
+                  {diffMode && diffs ? (
+                    <div className="mt-0.5">
+                      {diffs.titleDiff.changed ? (
+                        <div className="space-y-0.5">
+                          <div className="break-all rounded-sm bg-destructive/10 px-2 py-0.5 text-sm line-through text-destructive">
+                            {diffs.titleDiff.oldValue}
+                          </div>
+                          <div className="break-all rounded-sm bg-success/10 px-2 py-0.5 text-sm text-success">
+                            {diffs.titleDiff.newValue}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="mt-0.5 break-all text-sm font-medium">{decryptedData.title}</div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="mt-0.5 break-all text-sm font-medium">{decryptedData.title}</div>
+                  )}
                   <div className="mt-1 text-xs text-muted-foreground">
                     {formatTime(selectedVersion.createdAt)}
                   </div>
@@ -96,15 +162,35 @@ export function HistoryDialog({ itemId, open, onOpenChange }: HistoryDialogProps
                   ) : (
                     fields.map((field) => {
                       const value = decryptedData.fields[field.name];
-                      if (!value) return null;
+                      if (!value && (!diffMode || !diffs)) return null;
+                      const diff = diffs?.fields.find((d) => d.key === field.name);
+                      const changed = diff?.changed ?? false;
                       return (
                         <div key={field.name} className="flex items-start gap-2 border-b border-border py-2 last:border-0">
                           {createElement(getFieldIcon(field.name), { className: 'mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground' })}
                           <div className="min-w-0 flex-1">
-                            <div className="text-xs text-muted-foreground">{field.label}</div>
-                            <div className="mt-0.5 break-all text-sm">
-                              {field.type === 'password' ? '••••••••' : value}
+                            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                              {field.label}
+                              {diffMode && changed && (
+                                <span className="rounded bg-warning/10 px-1 text-[10px] text-warning">
+                                  已变更
+                                </span>
+                              )}
                             </div>
+                            {diffMode && diff && changed ? (
+                              <div className="mt-0.5 space-y-0.5">
+                                <div className="break-all rounded-sm bg-destructive/10 px-2 py-0.5 text-xs line-through text-destructive">
+                                  {field.type === 'password' ? '••••••••（旧）' : `${diff.oldValue ?? '（空）'}`}
+                                </div>
+                                <div className="break-all rounded-sm bg-success/10 px-2 py-0.5 text-xs text-success">
+                                  {field.type === 'password' ? '••••••••（新）' : `${diff.newValue ?? '（空）'}`}
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="mt-0.5 break-all text-sm">
+                                {field.type === 'password' ? '••••••••' : value}
+                              </div>
+                            )}
                           </div>
                         </div>
                       );

@@ -17,9 +17,9 @@ interface ImportStepResultProps {
 
 export function ImportStepResult({ summary, onDone }: ImportStepResultProps) {
   const stats = [
-    { label: '成功导入', value: summary.imported, icon: CheckCircle2, color: 'text-green-600' },
+    { label: '成功导入', value: summary.imported, icon: CheckCircle2, color: 'text-success' },
     { label: '跳过', value: summary.skipped, icon: AlertCircle, color: 'text-muted-foreground' },
-    { label: '覆盖', value: summary.overwritten, icon: CheckCircle2, color: 'text-blue-600' },
+    { label: '覆盖', value: summary.overwritten, icon: CheckCircle2, color: 'text-success' },
     { label: '失败', value: summary.failed, icon: XCircle, color: 'text-destructive' },
   ];
 

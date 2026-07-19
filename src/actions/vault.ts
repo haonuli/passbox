@@ -12,15 +12,20 @@
 
 import { db } from '@/lib/db';
 import { getVerifiedSession } from '@/lib/auth-check';
-import type { VaultData, ActionResult } from '@/types/api';
+import type { VaultData, ActionResult, ItemTagRelation } from '@/types/api';
 import type { VaultRow, ItemRow, TagRow } from '@/types/db';
 import type { EncryptedData } from '@/types/crypto';
 
+interface ItemTagRow {
+  item_id: string;
+  tag_id: string;
+}
+
 /**
- * 获取当前用户所有保险库 + 条目 + 标签（密文）。
+ * 获取当前用户所有保险库 + 条目 + 标签 + 标签关联（密文）。
  *
  * 服务端只返回密文，客户端用 Symmetric Key 解密。
- * 按 updated_at DESC 排序条目。
+ * 按 updated_at DESC 排序条目。item_tags 仅返回 ID 关联用于客户端按标签筛选。
  */
 export async function getVaultData(): Promise<ActionResult<VaultData>> {
   try {
@@ -30,7 +35,7 @@ export async function getVaultData(): Promise<ActionResult<VaultData>> {
     }
     const userId = session.sub;
 
-    const [vaultsResult, itemsResult, tagsResult] = await Promise.all([
+    const [vaultsResult, itemsResult, tagsResult, itemTagsResult] = await Promise.all([
       db.query<VaultRow>(
         `SELECT id, user_id, name_encrypted, display_order, created_at, updated_at
          FROM vaults WHERE user_id = $1 ORDER BY display_order ASC, created_at ASC`,
@@ -38,15 +43,29 @@ export async function getVaultData(): Promise<ActionResult<VaultData>> {
       ),
       db.query<ItemRow>(
         `SELECT id, user_id, vault_id, item_type_id, title_encrypted, data_encrypted,
-                is_favorite, created_at, updated_at
-         FROM items WHERE user_id = $1 ORDER BY updated_at DESC`,
+                is_favorite, created_at, updated_at, deleted_at
+         FROM items
+         WHERE user_id = $1 AND deleted_at IS NULL
+         ORDER BY updated_at DESC`,
         [userId],
       ),
       db.query<TagRow>(
         `SELECT id, user_id, name, created_at FROM tags WHERE user_id = $1 ORDER BY name ASC`,
         [userId],
       ),
+      db.query<ItemTagRow>(
+        `SELECT it.item_id, it.tag_id
+         FROM item_tags it
+         JOIN items i ON it.item_id = i.id
+         WHERE i.user_id = $1 AND i.deleted_at IS NULL`,
+        [userId],
+      ),
     ]);
+
+    const itemTags: ItemTagRelation[] = itemTagsResult.rows.map((r) => ({
+      itemId: r.item_id,
+      tagId: r.tag_id,
+    }));
 
     return {
       ok: true,
@@ -54,6 +73,7 @@ export async function getVaultData(): Promise<ActionResult<VaultData>> {
         vaults: vaultsResult.rows,
         items: itemsResult.rows,
         tags: tagsResult.rows,
+        itemTags,
       },
     };
   } catch {
@@ -145,9 +165,10 @@ export async function deleteVault(vaultId: string): Promise<ActionResult<null>> 
     }
     const userId = session.sub;
 
-    // 检查保险库是否为空
+    // 检查保险库是否为空（仅统计未删除的条目，回收站条目不算）
     const countResult = await db.query(
-      'SELECT COUNT(*)::int AS count FROM items WHERE vault_id = $1 AND user_id = $2',
+      `SELECT COUNT(*)::int AS count FROM items
+       WHERE vault_id = $1 AND user_id = $2 AND deleted_at IS NULL`,
       [vaultId, userId],
     );
     const itemCount = countResult.rows[0].count as number;

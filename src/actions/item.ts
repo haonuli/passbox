@@ -188,7 +188,11 @@ export async function updateItem(
 }
 
 /**
- * 删除条目（级联删除 item_tags）。
+ * 删除条目（软删除，移入回收站）。
+ *
+ * 标记 deleted_at = NOW()，条目从密码库列表消失，进入回收站。
+ * 30 天内可通过 restoreItem 恢复；超过 30 天由 lazy purge 物理清理。
+ * 级联清理 item_tags / item_history / item_attachments 由外键 ON DELETE CASCADE 保证（仅 purge 时生效）。
  *
  * @param itemId 条目 ID
  */
@@ -201,7 +205,8 @@ export async function deleteItem(itemId: string): Promise<ActionResult<null>> {
     const userId = session.sub;
 
     const result = await db.query(
-      'DELETE FROM items WHERE id = $1 AND user_id = $2',
+      `UPDATE items SET deleted_at = NOW()
+       WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL`,
       [itemId, userId],
     );
     if (result.rowCount === 0) {

@@ -80,9 +80,9 @@ export function RecoverForm() {
               name="email"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>邮箱地址</FormLabel>
+                  <FormLabel htmlFor="recover-email">邮箱地址</FormLabel>
                   <FormControl>
-                    <Input type="email" placeholder="you@example.com" autoComplete="email" disabled={isProcessing} {...field} />
+                    <Input id="recover-email" type="email" placeholder="you@example.com" autoComplete="email" inputMode="email" autoFocus disabled={isProcessing} {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -94,10 +94,26 @@ export function RecoverForm() {
               name="recoveryCode"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>恢复码</FormLabel>
+                  <FormLabel htmlFor="recover-code">恢复码</FormLabel>
                   <FormControl>
-                    <Input type="text" placeholder="PBOX-XXXX-XXXX-XXXX-XXXX" autoComplete="off" disabled={isProcessing} className="font-mono" {...field} />
+                    <Input
+                      id="recover-code"
+                      type="text"
+                      placeholder="PBOX-XXXX-XXXX-XXXX-XXXX"
+                      autoComplete="off"
+                      disabled={isProcessing}
+                      className="font-mono uppercase"
+                      {...field}
+                      onChange={(e) => {
+                        // 自动去除空格并转大写
+                        const formatted = e.target.value.replace(/\s/g, '').toUpperCase();
+                        field.onChange(formatted);
+                      }}
+                    />
                   </FormControl>
+                  <p className="text-xs text-muted-foreground">
+                    恢复码在注册时生成并展示于 Emergency Kit。如果没有保存恢复码，由于零知识加密，账户数据将无法找回。
+                  </p>
                   <FormMessage />
                 </FormItem>
               )}
@@ -108,9 +124,9 @@ export function RecoverForm() {
               name="newMasterPassword"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>新主密码</FormLabel>
+                  <FormLabel htmlFor="recover-new-password">新主密码</FormLabel>
                   <FormControl>
-                    <PasswordInput placeholder="至少 12 位，含大小写字母和数字" autoComplete="new-password" disabled={isProcessing} {...field} />
+                    <PasswordInput id="recover-new-password" placeholder="至少 12 位，含大小写字母和数字" autoComplete="new-password" disabled={isProcessing} {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -122,9 +138,9 @@ export function RecoverForm() {
               name="confirmPassword"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>确认新主密码</FormLabel>
+                  <FormLabel htmlFor="recover-confirm-password">确认新主密码</FormLabel>
                   <FormControl>
-                    <PasswordInput placeholder="再次输入新主密码" autoComplete="new-password" disabled={isProcessing} {...field} />
+                    <PasswordInput id="recover-confirm-password" placeholder="再次输入新主密码" autoComplete="new-password" disabled={isProcessing} {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>

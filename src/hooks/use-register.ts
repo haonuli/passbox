@@ -32,8 +32,8 @@ import { useAuthStore } from '@/stores/auth-store';
 import { useVaultStore } from '@/stores/vault-store';
 import type { RegisterRequest, RegisterResponse } from '@/types/api';
 
-/** 注册流程状态 */
-export type RegisterStatus = 'idle' | 'encrypting' | 'submitting' | 'success' | 'error';
+/** 注册流程状态（UX-013：derive/encrypt/submit 三阶段细化文案） */
+export type RegisterStatus = 'idle' | 'deriving' | 'encrypting' | 'submitting' | 'success' | 'error';
 
 /** 默认保险库名称（明文，注册时由客户端加密后上传） */
 const DEFAULT_VAULT_NAME = '个人保险库';
@@ -58,7 +58,7 @@ export function useRegister(): UseRegisterReturn {
   const [user, setUser] = useState<{ id: string; email: string } | null>(null);
 
   const register = useCallback(async (email: string, masterPassword: string) => {
-    setStatus('encrypting');
+    setStatus('deriving');
     setError(null);
 
     // M-14：敏感密钥材料声明在 try 外，catch 中零填充防止内存遗留
@@ -74,7 +74,8 @@ export function useRegister(): UseRegisterReturn {
       // 2. Argon2id 派生 Master Key（Web Worker）
       masterKey = await deriveMasterKeyViaWorker(masterPassword, kdfConfig);
 
-      // 3. 生成 Symmetric Key
+      // 3. 生成 Symmetric Key（进入加密阶段）
+      setStatus('encrypting');
       const symmetricKey = await generateSymmetricKey();
 
       // 4. 用 Master Key 加密 Symmetric Key

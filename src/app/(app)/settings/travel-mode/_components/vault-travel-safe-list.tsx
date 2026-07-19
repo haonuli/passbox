@@ -60,7 +60,7 @@ export function VaultTravelSafeList({
                   />
                   <span className="flex-1 text-sm font-medium">{vault.name}</span>
                   {checked && (
-                    <span className="text-xs text-blue-600">旅行安全</span>
+                    <span className="text-xs text-success">旅行安全</span>
                   )}
                 </label>
               );

@@ -8,7 +8,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Loader2, Copy, ShieldCheck } from 'lucide-react';
+import { Loader2, Copy, ShieldCheck, Clock, Eye, KeyRound } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import {
@@ -123,8 +123,15 @@ export function ShareDialog({ item, open, onOpenChange }: ShareDialogProps) {
             </DialogHeader>
 
             <div className="space-y-4 py-2">
+              {/* UX-032：过期时间权限说明 */}
               <div className="space-y-2">
-                <Label>过期时间</Label>
+                <div className="flex items-center gap-1.5">
+                  <Clock className="h-3.5 w-3.5 text-muted-foreground" />
+                  <Label>过期时间</Label>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  链接将在到达过期时间后自动失效，无法再被访问。
+                </p>
                 <div className="flex flex-wrap gap-2">
                   {EXPIRY_OPTIONS.map((opt) => (
                     <button
@@ -142,8 +149,15 @@ export function ShareDialog({ item, open, onOpenChange }: ShareDialogProps) {
                 </div>
               </div>
 
+              {/* UX-032：查看次数权限说明 */}
               <div className="space-y-2">
-                <Label>查看次数限制</Label>
+                <div className="flex items-center gap-1.5">
+                  <Eye className="h-3.5 w-3.5 text-muted-foreground" />
+                  <Label>查看次数限制</Label>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  达到限制次数后链接失效。「不限」表示只要未过期即可访问。
+                </p>
                 <div className="flex flex-wrap gap-2">
                   {VIEW_LIMIT_OPTIONS.map((opt) => (
                     <button
@@ -158,6 +172,15 @@ export function ShareDialog({ item, open, onOpenChange }: ShareDialogProps) {
                       {opt.label}
                     </button>
                   ))}
+                </div>
+              </div>
+
+              {/* UX-032：密钥说明 */}
+              <div className="flex items-start gap-2 rounded-md border border-border bg-muted/30 p-2.5 text-xs text-muted-foreground">
+                <KeyRound className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
+                <div>
+                  <span className="font-medium text-foreground">零知识加密：</span>
+                  AES-256 密钥仅在链接 URL 的 # 后面（不上传服务端），任何拿到链接的人都可解密查看，请通过安全渠道发送。
                 </div>
               </div>
             </div>
@@ -180,8 +203,8 @@ export function ShareDialog({ item, open, onOpenChange }: ShareDialogProps) {
             </DialogHeader>
 
             <div className="space-y-2 py-2">
-              <Label>链接地址</Label>
-              <Input readOnly value={shareUrl} onFocus={(e) => e.target.select()} />
+              <Label htmlFor="share-url">链接地址</Label>
+              <Input id="share-url" readOnly value={shareUrl} onFocus={(e) => e.target.select()} />
               <div className="flex items-start gap-2 rounded-md bg-muted/50 p-3 text-xs text-muted-foreground">
                 <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
                 <span>链接包含解密密钥，请通过安全渠道发送给信任的人。任何人获得此链接即可查看条目内容。</span>

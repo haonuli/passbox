@@ -47,7 +47,7 @@ export function BreachList() {
   if (results.length === 0) {
     return (
       <div className="flex items-center gap-2 p-4">
-        <CheckCircle2 className="h-5 w-5 text-green-500" />
+        <CheckCircle2 className="h-5 w-5 text-success" />
         <span className="text-sm">未发现泄露密码</span>
       </div>
     );
@@ -56,11 +56,11 @@ export function BreachList() {
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-2 px-1 text-sm text-muted-foreground">
-        <AlertTriangle className="h-4 w-4 text-red-500" />
+        <AlertTriangle className="h-4 w-4 text-destructive" />
         发现 {results.length} 个泄露密码
       </div>
       {error && (
-        <div className="rounded-md border border-yellow-500/30 bg-yellow-500/5 px-3 py-2 text-xs text-muted-foreground">
+        <div className="rounded-md border border-warning/30 bg-warning/5 px-3 py-2 text-xs text-muted-foreground">
           {error}
         </div>
       )}
@@ -74,15 +74,15 @@ export function BreachList() {
               className={cn(
                 'flex items-center justify-between gap-2 rounded-md border p-3 transition-colors hover:bg-muted/50',
                 isHighRisk
-                  ? 'border-red-500/30 bg-red-500/5'
-                  : 'border-orange-500/30 bg-orange-500/5',
+                  ? 'border-destructive/30 bg-destructive/5'
+                  : 'border-warning/30 bg-warning/5',
               )}
             >
               <div className="flex min-w-0 items-center gap-2">
                 <AlertTriangle
                   className={cn(
                     'h-4 w-4 shrink-0',
-                    isHighRisk ? 'text-red-500' : 'text-orange-500',
+                    isHighRisk ? 'text-destructive' : 'text-warning',
                   )}
                 />
                 <span className="truncate text-sm">{item.title}</span>
@@ -90,7 +90,7 @@ export function BreachList() {
               <span
                 className={cn(
                   'shrink-0 text-xs font-medium',
-                  isHighRisk ? 'text-red-600' : 'text-orange-600',
+                  isHighRisk ? 'text-destructive' : 'text-warning',
                 )}
               >
                 泄露 {formatBreachCount(item.breachCount)}

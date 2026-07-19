@@ -121,11 +121,11 @@ export function TravelModeView() {
             <CardContent>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2 text-sm">
-                  <span className={travelMode ? 'font-medium text-blue-600' : 'text-muted-foreground'}>
+                  <span className={travelMode ? 'font-medium text-success' : 'text-muted-foreground'}>
                     {loading ? '加载中...' : travelMode ? '已开启' : '已关闭'}
                   </span>
                   {travelMode && (
-                    <span className="flex items-center gap-1 rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700 dark:bg-blue-950 dark:text-blue-300">
+                    <span className="flex items-center gap-1 rounded-full bg-success/10 px-2 py-0.5 text-xs font-medium text-success">
                       <Plane className="h-3 w-3" />
                       旅行中
                     </span>

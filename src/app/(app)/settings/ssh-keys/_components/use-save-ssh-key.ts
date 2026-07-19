@@ -82,6 +82,7 @@ export function useSaveSshKey() {
             isFavorite: false,
             createdAt: result.data.created_at,
             updatedAt: result.data.updated_at,
+            deletedAt: null,
             tagIds: [],
           };
           upsertItem(newItem);

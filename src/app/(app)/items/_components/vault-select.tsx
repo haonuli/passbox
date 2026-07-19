@@ -18,14 +18,17 @@ interface VaultSelectProps {
   onChange: (vaultId: string) => void;
   /** 是否禁用 */
   disabled?: boolean;
+  /** 传递给原生 select 的 id（用于 Label 关联） */
+  id?: string;
 }
 
-export function VaultSelect({ value, onChange, disabled }: VaultSelectProps) {
+export function VaultSelect({ value, onChange, disabled, id }: VaultSelectProps) {
   const vaults = useVaultStore((s) => s.vaults);
 
   return (
     <div className="relative">
       <select
+        id={id}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         disabled={disabled || vaults.length === 0}

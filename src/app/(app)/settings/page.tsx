@@ -4,7 +4,7 @@
  * 设置入口列表，链接到各子设置页。
  */
 import Link from 'next/link';
-import { Shield, Palette, Database, Share2, Plane, TerminalSquare } from 'lucide-react';
+import { Shield, Palette, Database, Share2, Plane, TerminalSquare, HelpCircle, Info } from 'lucide-react';
 
 const SETTINGS_ITEMS = [
   { href: '/settings/security', label: '安全设置', description: '两步验证（2FA）、账户安全', icon: Shield },
@@ -13,6 +13,9 @@ const SETTINGS_ITEMS = [
   { href: '/settings/data', label: '数据管理', description: '导入、导出密码数据', icon: Database },
   { href: '/settings/shares', label: '共享管理', description: '查看和管理共享链接', icon: Share2 },
   { href: '/settings/travel-mode', label: '旅行模式', description: '旅行时隐藏敏感数据', icon: Plane },
+  // UX-038：帮助中心与关于入口
+  { href: '/settings/help', label: '帮助中心', description: '常见问题、快捷键、数据安全说明', icon: HelpCircle },
+  { href: '/settings/about', label: '关于 Passbox', description: '版本信息、技术栈、核心特性', icon: Info },
 ];
 
 export default function SettingsPage() {
@@ -29,7 +32,7 @@ export default function SettingsPage() {
               <Link
                 key={item.href}
                 href={item.href}
-                className="flex items-center gap-3 rounded-md border border-border p-3 transition-colors hover:bg-muted/50"
+                className="marketing-card flex items-center gap-3 p-3"
               >
                 <Icon className="h-5 w-5 shrink-0 text-muted-foreground" />
                 <div className="min-w-0 flex-1">

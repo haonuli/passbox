@@ -47,7 +47,7 @@ function StatusBadge({ expired }: { expired: boolean }) {
     return <span className={cn(base, 'bg-muted text-muted-foreground')}>已过期</span>;
   }
   return (
-    <span className={cn(base, 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400')}>
+    <span className={cn(base, 'bg-success/10 text-success')}>
       活跃
     </span>
   );

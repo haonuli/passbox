@@ -33,6 +33,7 @@ function makeItem(overrides: Partial<DecryptedItem> = {}): DecryptedItem {
     isFavorite: true,
     createdAt: '2025-01-01T00:00:00Z',
     updatedAt: '2025-01-01T00:00:00Z',
+    deletedAt: null,
     tagIds: [],
     ...overrides,
   };

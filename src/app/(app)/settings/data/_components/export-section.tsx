@@ -160,6 +160,7 @@ export function ExportSection() {
           </DialogHeader>
           <div className="space-y-2">
             <PasswordInput
+              id="export-password"
               placeholder="输入主密码"
               value={password}
               onChange={(e) => setPassword(e.target.value)}

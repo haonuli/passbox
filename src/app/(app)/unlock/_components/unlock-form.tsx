@@ -7,14 +7,14 @@
  */
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Loader2, Eye, EyeOff, Lock } from 'lucide-react';
+import { Loader2, Lock } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { PasswordInput } from '@/components/password-input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import {
   Form,
@@ -25,6 +25,7 @@ import {
   FormMessage,
 } from '@/components/ui/form';
 import { useUnlock } from '@/hooks/use-unlock';
+import { useAuthStore } from '@/stores/auth-store';
 import { getSafeRedirect } from '@/lib/redirect';
 
 const unlockSchema = z.object({
@@ -35,7 +36,7 @@ type UnlockFormValues = z.infer<typeof unlockSchema>;
 
 export function UnlockForm() {
   const { status, error, sessionExpired, unlock } = useUnlock();
-  const [showPassword, setShowPassword] = useState(false);
+  const user = useAuthStore((s) => s.user);
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -66,6 +67,17 @@ export function UnlockForm() {
     await unlock(values.masterPassword);
   };
 
+  const handleSwitchAccount = async () => {
+    // 登出当前会话，返回登录页
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' });
+    } catch {
+      // 忽略网络错误，仍跳转登录页
+    }
+    useAuthStore.getState().logout();
+    router.replace('/login');
+  };
+
   const isProcessing = status === 'fetching' || status === 'deriving';
   const statusText =
     status === 'fetching' ? '正在获取参数…' : status === 'deriving' ? '正在派生密钥…' : '解锁';
@@ -78,7 +90,13 @@ export function UnlockForm() {
         </div>
         <CardTitle className="text-2xl">解锁密码库</CardTitle>
         <CardDescription>
-          会话保持有效，输入主密码即可恢复访问
+          {user?.email ? (
+            <>
+              以 <span className="font-medium text-foreground">{user.email}</span> 登录
+            </>
+          ) : (
+            '会话保持有效，输入主密码即可恢复访问'
+          )}
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -90,28 +108,16 @@ export function UnlockForm() {
               name="masterPassword"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>主密码</FormLabel>
+                  <FormLabel htmlFor="unlock-password">主密码</FormLabel>
                   <FormControl>
-                    <div className="relative">
-                      <Input
-                        type={showPassword ? 'text' : 'password'}
-                        placeholder="输入主密码"
-                        autoComplete="current-password"
-                        disabled={isProcessing}
-                        className="pr-10"
-                        autoFocus
-                        {...field}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowPassword(!showPassword)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                        tabIndex={-1}
-                        aria-label={showPassword ? '隐藏密码' : '显示密码'}
-                      >
-                        {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                      </button>
-                    </div>
+                    <PasswordInput
+                      id="unlock-password"
+                      placeholder="输入主密码"
+                      autoComplete="current-password"
+                      disabled={isProcessing}
+                      autoFocus
+                      {...field}
+                    />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -130,6 +136,21 @@ export function UnlockForm() {
               {isProcessing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               {statusText}
             </Button>
+
+            {/* 切换账号 */}
+            {user?.email && (
+              <p className="text-center text-sm text-muted-foreground">
+                不是这个账号？{' '}
+                <button
+                  type="button"
+                  onClick={handleSwitchAccount}
+                  className="font-medium text-primary hover:underline"
+                  disabled={isProcessing}
+                >
+                  切换账号
+                </button>
+              </p>
+            )}
           </form>
         </Form>
       </CardContent>

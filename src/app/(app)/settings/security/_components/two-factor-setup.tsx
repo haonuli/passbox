@@ -247,6 +247,7 @@ export function TwoFactorSetup() {
                         variant="outline"
                         size="icon"
                         onClick={() => handleCopy(secret, 'secret', '密钥')}
+                        aria-label="复制密钥"
                       >
                         {copiedField === 'secret' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
                       </Button>
@@ -264,6 +265,7 @@ export function TwoFactorSetup() {
                         variant="outline"
                         size="icon"
                         onClick={() => handleCopy(otpauthUrl, 'url', 'URI')}
+                        aria-label="复制 OTP URI"
                       >
                         {copiedField === 'url' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
                       </Button>
@@ -307,7 +309,7 @@ export function TwoFactorSetup() {
 
               {step === 'backup-codes' && (
                 <div className="space-y-4">
-                  <div className="rounded-md border border-yellow-500/30 bg-yellow-500/5 p-3 text-sm text-yellow-600">
+                  <div className="rounded-md border border-warning/30 bg-warning/5 p-3 text-sm text-warning">
                     请妥善保存以下备用恢复码。每个码仅可使用一次，在无法访问验证器时可用于登录。此为唯一一次展示机会。
                   </div>
                   <div className="grid grid-cols-2 gap-2 rounded-md border border-border bg-muted p-4">
@@ -335,7 +337,7 @@ export function TwoFactorSetup() {
 
               {step === 'enabled' && (
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 text-sm text-green-600">
+                  <div className="flex items-center gap-2 text-sm text-success">
                     <ShieldCheck className="h-4 w-4" />
                     2FA 已开启
                   </div>

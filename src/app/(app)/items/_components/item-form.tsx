@@ -25,10 +25,12 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { PasswordInput } from '@/components/password-input';
+import { PasswordGeneratorInline } from '@/components/password-generator-inline';
 import { VaultSelect } from '@/app/(app)/items/_components/vault-select';
 import { TagInput } from '@/app/(app)/items/_components/tag-input';
 import { useAuthStore } from '@/stores/auth-store';
 import { useVaultStore } from '@/stores/vault-store';
+import { getVaultData } from '@/actions/vault';
 import { createItem, updateItem } from '@/actions/item';
 import { saveHistory } from '@/actions/item-history';
 import { encrypt } from '@/lib/crypto/aes';
@@ -77,13 +79,23 @@ function groupFieldsByRow(fields: FieldConfig[]): FieldConfig[][] {
 }
 
 /** 渲染单个字段 */
-function FieldInput({ field, register, error }: {
+function FieldInput({ field, register, error, onGeneratePassword, onUrlBlur }: {
   field: FieldConfig;
   register: UseFormRegister<FormValues>;
   error?: string;
+  /** 密码字段生成器回调，传入生成的密码 */
+  onGeneratePassword?: (password: string) => void;
+  /** URL 字段失焦回调（用于 UX-030 自动填充标题）*/
+  onUrlBlur?: (url: string) => void;
 }) {
-  const fieldId = `field-${field.name}`;
+  const fieldId = `item-field-${field.name}`;
   const errorEl = error ? <p className="text-xs text-destructive">{error}</p> : null;
+  // UX-030：识别 URL 字段（字段名或类型匹配）
+  const isUrlField = field.name === 'url' || field.name === 'website';
+
+  const handleBlur = (e: React.FocusEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    if (isUrlField && onUrlBlur) onUrlBlur(e.target.value);
+  };
 
   if (field.type === 'textarea') {
     const minH = field.name === 'noteText' ? 200 : 80;
@@ -92,10 +104,12 @@ function FieldInput({ field, register, error }: {
         <Label htmlFor={fieldId}>{field.label}</Label>
         <textarea
           id={fieldId}
+          aria-invalid={!!error}
           className="flex min-h-[var(--min-h)] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
           style={{ ['--min-h' as string]: `${minH}px` }}
           placeholder={field.placeholder}
           {...register(field.name)}
+          onBlur={handleBlur}
         />
         {errorEl}
       </div>
@@ -106,7 +120,17 @@ function FieldInput({ field, register, error }: {
     return (
       <div className="space-y-1.5">
         <Label htmlFor={fieldId}>{field.label}</Label>
-        <PasswordInput id={fieldId} placeholder={field.placeholder} {...register(field.name)} />
+        <PasswordInput
+          id={fieldId}
+          aria-invalid={!!error}
+          placeholder={field.placeholder}
+          extraActions={
+            onGeneratePassword ? (
+              <PasswordGeneratorInline onUse={onGeneratePassword} />
+            ) : undefined
+          }
+          {...register(field.name)}
+        />
         {errorEl}
       </div>
     );
@@ -117,12 +141,24 @@ function FieldInput({ field, register, error }: {
       <Label htmlFor={fieldId}>{field.label}</Label>
       <Input
         id={fieldId}
+        aria-invalid={!!error}
         type={field.type === 'date' ? 'date' : 'text'}
         placeholder={field.placeholder}
         {...register(field.name)}
+        onBlur={isUrlField ? handleBlur : undefined}
       />
       {errorEl}
     </div>
+  );
+}
+
+/** UX-029：表单分组容器 */
+function FormSection({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section className="space-y-3 rounded-md border border-border bg-card/30 p-4">
+      <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{title}</h3>
+      <div className="space-y-3">{children}</div>
+    </section>
   );
 }
 
@@ -134,7 +170,7 @@ interface ItemFormProps {
 export function ItemForm({ mode, itemId }: ItemFormProps) {
   const router = useRouter();
   const symmetricKey = useAuthStore((s) => s.symmetricKey);
-  const { items, vaults, upsertItem } = useVaultStore();
+  const { items, vaults, upsertItem, loaded, loading, setVaultData } = useVaultStore();
   const [saving, setSaving] = useState(false);
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
 
@@ -162,6 +198,7 @@ export function ItemForm({ mode, itemId }: ItemFormProps) {
     handleSubmit,
     reset,
     watch,
+    getValues,
     setValue,
     formState: { errors },
   } = useForm<FormValues>({
@@ -179,7 +216,6 @@ export function ItemForm({ mode, itemId }: ItemFormProps) {
   // 编辑模式：预填充已有数据
   useEffect(() => {
     if (mode === 'edit' && existingItem) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setItemTypeId(existingItem.itemTypeId);
       const values: Record<string, string> = { title: existingItem.title };
       for (const f of currentConfig.fields) {
@@ -194,10 +230,28 @@ export function ItemForm({ mode, itemId }: ItemFormProps) {
     if (vaults.length === 0) return;
     const exists = vaults.some((v) => v.id === vaultId);
     if (!exists) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setVaultId(vaults[0].id);
     }
   }, [vaults, vaultId]);
+
+  // 主动加载 vault 数据：用户可能直接访问 /items/new 而未经过 /vault 页面，
+  // 此时 vault-store 未加载，需要主动拉取并解密，确保保险库选择器有数据。
+  useEffect(() => {
+    if (loaded || loading || !symmetricKey) return;
+    let cancelled = false;
+    (async () => {
+      const result = await getVaultData();
+      if (cancelled || !result.ok) return;
+      try {
+        await setVaultData(result.data, symmetricKey);
+      } catch {
+        // 解密失败时忽略，VaultSelect 会显示"无可用保险库"
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [loaded, loading, symmetricKey, setVaultData]);
 
   // SSH 密钥类型：私钥变化时自动检测密钥类型，并在公钥为空时尝试提取
   const watchedPrivateKey = watch('privateKey');
@@ -224,6 +278,23 @@ export function ItemForm({ mode, itemId }: ItemFormProps) {
     }
     return payload as ItemData;
   }, [currentConfig]);
+
+  // UX-030：URL 失焦时若标题为空，自动填充域名作为标题
+  const handleUrlBlur = useCallback((url: string) => {
+    if (!url) return;
+    const currentTitle = getValues('title');
+    if (currentTitle) return; // 标题已填则不覆盖
+    try {
+      // 容忍无协议的 URL
+      const normalized = /^https?:\/\//i.test(url) ? url : `https://${url}`;
+      const hostname = new URL(normalized).hostname.replace(/^www\./, '');
+      if (hostname) {
+        setValue('title', hostname, { shouldValidate: true, shouldDirty: true });
+      }
+    } catch {
+      // URL 无效，忽略
+    }
+  }, [getValues, setValue]);
 
   const onSubmit = useCallback(
     async (values: FormValues) => {
@@ -281,6 +352,7 @@ export function ItemForm({ mode, itemId }: ItemFormProps) {
               isFavorite: false,
               createdAt: result.data.created_at,
               updatedAt: result.data.updated_at,
+              deletedAt: null,
               tagIds: [],
             };
             upsertItem(newItem);
@@ -357,86 +429,108 @@ export function ItemForm({ mode, itemId }: ItemFormProps) {
         onSubmit={handleSubmit(onSubmit)}
         className="flex-1 space-y-4 overflow-auto p-4"
       >
-        {/* 类型选择器（仅 create 模式可切换） */}
-        <div className="space-y-1.5">
-          <Label>条目类型</Label>
-          <div className="flex flex-wrap gap-2">
-            {ITEM_TYPE_CONFIGS.map((opt) => {
-              const Icon = opt.icon;
-              const isDisabled = mode === 'edit';
+        {/* UX-029：基本信息分组 */}
+        <FormSection title="基本信息">
+          {/* 类型选择器（仅 create 模式可切换） */}
+          <div className="space-y-1.5">
+            <Label>条目类型</Label>
+            <div className="flex flex-wrap gap-2">
+              {ITEM_TYPE_CONFIGS.map((opt) => {
+                const Icon = opt.icon;
+                const isDisabled = mode === 'edit';
+                return (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    disabled={isDisabled}
+                    onClick={() => setItemTypeId(opt.id)}
+                    className={cn(
+                      'flex items-center gap-1.5 rounded-md border px-3 py-2 text-sm font-medium transition-colors',
+                      itemTypeId === opt.id
+                        ? 'border-primary bg-primary text-primary-foreground'
+                        : 'border-border text-muted-foreground hover:bg-muted',
+                      isDisabled && 'cursor-not-allowed opacity-60',
+                    )}
+                  >
+                    <Icon className="h-4 w-4" />
+                    {opt.name}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* 标题（所有类型通用） */}
+          <div className="space-y-1.5">
+            <Label htmlFor="item-title">标题</Label>
+            <Input
+              id="item-title"
+              aria-invalid={!!errors.title}
+              placeholder="例如：Google 账号"
+              {...register('title')}
+            />
+            {errors.title?.message && (
+              <p className="text-xs text-destructive">{errors.title.message}</p>
+            )}
+          </div>
+
+          {/* 保险库选择 */}
+          <div className="space-y-1.5">
+            <Label htmlFor="item-vault">保险库</Label>
+            <VaultSelect id="item-vault" value={vaultId} onChange={setVaultId} />
+          </div>
+        </FormSection>
+
+        {/* UX-029：详细信息分组（动态字段） */}
+        {fieldRows.length > 0 && (
+          <FormSection title="详细信息">
+            {fieldRows.map((row, rowIdx) => {
+              if (row.length === 1) {
+                const field = row[0];
+                return (
+                  <FieldInput
+                    key={field.name}
+                    field={field}
+                    register={register}
+                    error={errors[field.name]?.message as string | undefined}
+                    onGeneratePassword={
+                      field.type === 'password'
+                        ? (pwd) => setValue(field.name, pwd, { shouldValidate: true, shouldDirty: true })
+                        : undefined
+                    }
+                    onUrlBlur={handleUrlBlur}
+                  />
+                );
+              }
               return (
-                <button
-                  key={opt.id}
-                  type="button"
-                  disabled={isDisabled}
-                  onClick={() => setItemTypeId(opt.id)}
-                  className={cn(
-                    'flex items-center gap-1.5 rounded-md border px-3 py-2 text-sm font-medium transition-colors',
-                    itemTypeId === opt.id
-                      ? 'border-primary bg-primary text-primary-foreground'
-                      : 'border-border text-muted-foreground hover:bg-muted',
-                    isDisabled && 'cursor-not-allowed opacity-60',
-                  )}
-                >
-                  <Icon className="h-4 w-4" />
-                  {opt.name}
-                </button>
+                <div key={rowIdx} className="grid grid-cols-2 gap-3">
+                  {row.map((field) => (
+                    <FieldInput
+                      key={field.name}
+                      field={field}
+                      register={register}
+                      error={errors[field.name]?.message as string | undefined}
+                      onGeneratePassword={
+                        field.type === 'password'
+                          ? (pwd) => setValue(field.name, pwd, { shouldValidate: true, shouldDirty: true })
+                          : undefined
+                      }
+                      onUrlBlur={handleUrlBlur}
+                    />
+                  ))}
+                </div>
               );
             })}
+          </FormSection>
+        )}
+
+        {/* UX-029：标签与备注分组 */}
+        <FormSection title="标签">
+          <div className="space-y-1.5">
+            <Label>标签</Label>
+            <TagInput selectedTagIds={selectedTagIds} onChange={setSelectedTagIds} />
           </div>
-        </div>
-
-        {/* 标题（所有类型通用） */}
-        <div className="space-y-1.5">
-          <Label htmlFor="title">标题</Label>
-          <Input
-            id="title"
-            placeholder="例如：Google 账号"
-            {...register('title')}
-          />
-          {errors.title?.message && (
-            <p className="text-xs text-destructive">{errors.title.message}</p>
-          )}
-        </div>
-
-        {/* 保险库选择 */}
-        <div className="space-y-1.5">
-          <Label>保险库</Label>
-          <VaultSelect value={vaultId} onChange={setVaultId} />
-        </div>
-
-        {/* 动态字段（按类型从配置渲染） */}
-        {fieldRows.map((row, rowIdx) => {
-          if (row.length === 1) {
-            const field = row[0];
-            return (
-              <FieldInput
-                key={field.name}
-                field={field}
-                register={register}
-                error={errors[field.name]?.message as string | undefined}
-              />
-            );
-          }
-          return (
-            <div key={rowIdx} className="grid grid-cols-2 gap-3">
-              {row.map((field) => (
-                <FieldInput
-                  key={field.name}
-                  field={field}
-                  register={register}
-                  error={errors[field.name]?.message as string | undefined}
-                />
-              ))}
-            </div>
-          );
-        })}
-
-        {/* 标签（所有类型通用） */}
-        <div className="space-y-1.5">
-          <Label>标签</Label>
-          <TagInput selectedTagIds={selectedTagIds} onChange={setSelectedTagIds} />
-        </div>
+        </FormSection>
 
         {/* 底部操作 */}
         <div className="flex justify-end gap-2 pt-2">

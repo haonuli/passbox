@@ -110,6 +110,11 @@ export async function deriveMasterKey(
       `KDF timeCost 不得低于 ${MIN_KDF_ITERATIONS}，收到 ${config.timeCost}`,
     );
   }
+  if (config.parallelism < MIN_KDF_PARALLELISM) {
+    throw new Error(
+      `KDF parallelism 不得低于 ${MIN_KDF_PARALLELISM}，收到 ${config.parallelism}`,
+    );
+  }
 
   const memLimitBytes = config.memoryCost * 1024; // KiB → 字节
   const opsLimit = config.timeCost;

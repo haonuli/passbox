@@ -15,6 +15,7 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
+import { cn } from '@/lib/utils';
 
 interface EmergencyKitProps {
   email: string;
@@ -26,6 +27,7 @@ export function EmergencyKit({ email, recoveryCode, registeredAt }: EmergencyKit
   const router = useRouter();
   const [copied, setCopied] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
+  const [downloaded, setDownloaded] = useState(false);
 
   const handleCopy = useCallback(async () => {
     try {
@@ -72,6 +74,7 @@ export function EmergencyKit({ email, recoveryCode, registeredAt }: EmergencyKit
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+    setDownloaded(true);
     toast.success('Emergency Kit 已下载，请离线保存');
   }, [email, recoveryCode, registeredAt]);
 
@@ -82,8 +85,8 @@ export function EmergencyKit({ email, recoveryCode, registeredAt }: EmergencyKit
   return (
     <Card className="mx-auto w-full max-w-lg">
       <CardHeader className="space-y-2 text-center">
-        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-green-500/10">
-          <ShieldCheck className="h-6 w-6 text-green-500" />
+        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-success/10">
+          <ShieldCheck className="h-6 w-6 text-success" />
         </div>
         <CardTitle className="text-xl">账户创建成功</CardTitle>
         <p className="text-sm text-muted-foreground">
@@ -127,10 +130,10 @@ export function EmergencyKit({ email, recoveryCode, registeredAt }: EmergencyKit
         </div>
 
         {/* 风险提示 */}
-        <div className="flex gap-3 rounded-md border border-yellow-500/30 bg-yellow-500/5 p-4">
-          <AlertTriangle className="h-5 w-5 flex-shrink-0 text-yellow-500" />
+        <div className="flex gap-3 rounded-md border border-warning/30 bg-warning/5 p-4">
+          <AlertTriangle className="h-5 w-5 flex-shrink-0 text-warning" />
           <div className="space-y-1 text-sm">
-            <p className="font-medium text-yellow-600 dark:text-yellow-500">重要安全提示</p>
+            <p className="font-medium text-warning">重要安全提示</p>
             <ul className="list-disc space-y-0.5 pl-4 text-muted-foreground">
               <li>恢复码仅显示一次，关闭此页面后将无法再次查看</li>
               <li>不要将恢复码存储在邮箱、云笔记等在线服务中</li>
@@ -144,12 +147,12 @@ export function EmergencyKit({ email, recoveryCode, registeredAt }: EmergencyKit
         <div className="flex gap-3">
           <Button
             type="button"
-            variant="outline"
+            variant={downloaded ? 'outline' : 'default'}
             className="flex-1"
             onClick={handleDownload}
           >
-            <Download className="mr-2 h-4 w-4" />
-            下载 Emergency Kit
+            <Download className={cn('mr-2 h-4 w-4', !downloaded && 'animate-pulse')} />
+            {downloaded ? '重新下载 Emergency Kit' : '下载 Emergency Kit（务必保存）'}
           </Button>
         </div>
 

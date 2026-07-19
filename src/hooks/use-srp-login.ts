@@ -49,9 +49,19 @@ export type LoginStatus =
   | 'success'
   | 'error';
 
+/** 登录错误类型，UI 据此显示不同的恢复建议 */
+export type LoginErrorType =
+  | 'network' // 网络错误（fetch 抛 TypeError）
+  | 'locked' // 账户锁定
+  | 'credentials' // 凭据错误（含邮箱不存在，防枚举统一）
+  | 'totp' // 2FA 验证失败
+  | 'server'; // 其他服务端错误
+
 export interface UseLoginReturn {
   status: LoginStatus;
   error: string | null;
+  /** 错误类型，用于 UI 显示不同的恢复建议（如"忘记密码？"链接） */
+  errorType: LoginErrorType | null;
   /** 账户锁定时的解锁时间（ISO 字符串），用于 UI 展示倒计时 */
   lockedUntil: string | null;
   /** 2FA 挑战信息（login 返回 202 时携带 ticket） */
@@ -88,6 +98,7 @@ function formatLocalTime(iso: string): string {
 export function useSrpLogin(): UseLoginReturn {
   const [status, setStatus] = useState<LoginStatus>('idle');
   const [error, setError] = useState<string | null>(null);
+  const [errorType, setErrorType] = useState<LoginErrorType | null>(null);
   const [lockedUntil, setLockedUntil] = useState<string | null>(null);
   const [totpChallenge, setTotpChallenge] = useState<{ ticket: string } | null>(null);
 
@@ -100,9 +111,17 @@ export function useSrpLogin(): UseLoginReturn {
    */
   const masterKeyRef = useRef<Uint8Array | null>(null);
 
+  /** 统一设置错误状态 */
+  const fail = (msg: string, type: LoginErrorType) => {
+    setError(msg);
+    setErrorType(type);
+    setStatus('error');
+  };
+
   const login = useCallback(async (email: string, masterPassword: string) => {
     setStatus('preloging');
     setError(null);
+    setErrorType(null);
     setLockedUntil(null);
 
     // M-14：敏感密钥材料声明在 try 外，catch 中零填充防止内存遗留
@@ -227,9 +246,23 @@ export function useSrpLogin(): UseLoginReturn {
       // M-14：错误路径下零填充敏感密钥材料，防止内存遗留
       zeroFill(masterKey);
       masterKey = null;
-      // 网络错误 / Worker 错误 / API 错误 / SRP 验证错误统一处理
-      setError(e instanceof Error ? e.message : '登录失败，请稍后重试');
-      setStatus('error');
+
+      const msg = e instanceof Error ? e.message : '登录失败，请稍后重试';
+
+      // 区分错误类型：网络错误（fetch 抛 TypeError）vs 已知业务错误 vs 未知服务端错误
+      if (e instanceof TypeError) {
+        // fetch 网络错误（无法连接服务器）
+        fail('网络连接失败，请检查网络后重试', 'network');
+      } else if (msg.startsWith('账户已锁定')) {
+        // 账户锁定（通过错误消息识别，避免 setState 闭包问题）
+        fail(msg, 'locked');
+      } else if (msg === INVALID_CREDENTIALS_MSG) {
+        // 凭据错误（邮箱或密码不正确）
+        fail(msg, 'credentials');
+      } else {
+        // 其他服务端错误（prelogin 失败、SRP 验证失败、解密失败等）
+        fail(msg, 'server');
+      }
     }
   }, []);
 
@@ -245,8 +278,7 @@ export function useSrpLogin(): UseLoginReturn {
   const completeTotpChallenge = useCallback(async (response: LoginResponse) => {
     const masterKey = masterKeyRef.current;
     if (!masterKey) {
-      setError('登录会话已过期，请重新登录');
-      setStatus('error');
+      fail('登录会话已过期，请重新登录', 'server');
       return;
     }
 
@@ -264,8 +296,7 @@ export function useSrpLogin(): UseLoginReturn {
 
       setStatus('success');
     } catch (e) {
-      setError(e instanceof Error ? e.message : '2FA 验证失败，请稍后重试');
-      setStatus('error');
+      fail(e instanceof Error ? e.message : '2FA 验证失败，请稍后重试', 'totp');
     } finally {
       // 无论成功失败，masterKey 已使用完毕（成功时所有权转移给 store），零填充清除
       zeroFill(masterKeyRef.current);
@@ -277,6 +308,7 @@ export function useSrpLogin(): UseLoginReturn {
   const reset = useCallback(() => {
     setStatus('idle');
     setError(null);
+    setErrorType(null);
     setLockedUntil(null);
     setTotpChallenge(null);
     // 清理可能残留的 masterKey
@@ -284,5 +316,5 @@ export function useSrpLogin(): UseLoginReturn {
     masterKeyRef.current = null;
   }, []);
 
-  return { status, error, lockedUntil, totpChallenge, login, completeTotpChallenge, reset };
+  return { status, error, errorType, lockedUntil, totpChallenge, login, completeTotpChallenge, reset };
 }

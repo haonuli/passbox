@@ -101,6 +101,19 @@ export function TotpChallenge({ ticket, email, onSuccess }: TotpChallengeProps) 
     }
   };
 
+  // UX-018：粘贴 6 位验证码自动填入并提交
+  const handleTotpPaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
+    const pasted = e.clipboardData.getData('text');
+    const digits = pasted.replace(/\D/g, '').slice(0, TOTP_CODE_LENGTH);
+    if (digits.length > 0) {
+      e.preventDefault();
+      setTotpCode(digits);
+      if (digits.length === TOTP_CODE_LENGTH && !loading) {
+        void submitVerify(digits, false);
+      }
+    }
+  };
+
   // 备用码提交
   const handleBackupSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -136,6 +149,7 @@ export function TotpChallenge({ ticket, email, onSuccess }: TotpChallengeProps) 
                 maxLength={TOTP_CODE_LENGTH}
                 value={totpCode}
                 onChange={(e) => handleTotpChange(e.target.value)}
+                onPaste={handleTotpPaste}
                 disabled={loading}
                 placeholder="000000"
                 className={baseInputClass}

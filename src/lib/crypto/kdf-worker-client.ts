@@ -15,6 +15,7 @@
  *
  * @see kdf.worker.ts, TECHNICAL_DESIGN.md 9.1
  */
+import { toast } from 'sonner';
 import type { KdfConfig } from './types';
 
 /** Worker 请求消息 */
@@ -40,16 +41,30 @@ let workerInstance: Worker | null = null;
 /** 自增请求 ID，用于匹配请求与响应（解决单例 Worker 并发串台问题） */
 let nextRequestId = 1;
 
+/** UX-048：Worker 降级提示是否已显示（会话内只提示一次） */
+let workerFallbackWarned = false;
+
 /**
  * 获取或创建 KDF Worker 单例。
  * 仅在浏览器环境调用（此模块由 'use client' 代码引入）。
  */
-function getWorker(): Worker {
+function getWorker(): Worker | null {
   if (workerInstance !== null) {
     return workerInstance;
   }
-  workerInstance = new Worker(new URL('./kdf.worker.ts', import.meta.url));
-  return workerInstance;
+  try {
+    workerInstance = new Worker(new URL('./kdf.worker.ts', import.meta.url));
+    return workerInstance;
+  } catch {
+    // UX-048：Worker 创建失败时提示用户主线程加密可能卡顿
+    if (!workerFallbackWarned) {
+      workerFallbackWarned = true;
+      toast.warning('加密 Worker 不可用，将使用主线程派生密钥，期间界面可能短暂卡顿', {
+        duration: 6000,
+      });
+    }
+    return null;
+  }
 }
 
 /**
@@ -71,6 +86,10 @@ export function deriveMasterKeyViaWorker(
     }
 
     const worker = getWorker();
+    if (worker === null) {
+      reject(new Error('Web Worker 创建失败，无法执行密钥派生'));
+      return;
+    }
     const requestId = nextRequestId++;
     let settled = false;
 

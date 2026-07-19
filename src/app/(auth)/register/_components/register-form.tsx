@@ -60,8 +60,15 @@ export function RegisterForm() {
     await register(values.email, values.masterPassword);
   };
 
-  const isProcessing = status === 'encrypting' || status === 'submitting';
-  const statusText = status === 'encrypting' ? '正在加密…' : status === 'submitting' ? '正在提交…' : '创建账户';
+  const isProcessing = status === 'deriving' || status === 'encrypting' || status === 'submitting';
+  const statusText =
+    status === 'deriving'
+      ? '正在派生主密钥…'
+      : status === 'encrypting'
+        ? '正在加密密钥…'
+        : status === 'submitting'
+          ? '正在提交…'
+          : '创建账户';
 
   return (
     <Card className="mx-auto w-full max-w-md">
@@ -77,9 +84,9 @@ export function RegisterForm() {
               name="email"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>邮箱地址</FormLabel>
+                  <FormLabel htmlFor="register-email">邮箱地址</FormLabel>
                   <FormControl>
-                    <Input type="email" placeholder="you@example.com" autoComplete="email" disabled={isProcessing} {...field} />
+                    <Input id="register-email" type="email" placeholder="you@example.com" autoComplete="email" inputMode="email" autoFocus disabled={isProcessing} {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -91,9 +98,9 @@ export function RegisterForm() {
               name="masterPassword"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>主密码</FormLabel>
+                  <FormLabel htmlFor="register-password">主密码</FormLabel>
                   <FormControl>
-                    <PasswordInput placeholder="至少 12 位，含大小写字母和数字" autoComplete="new-password" disabled={isProcessing} {...field} />
+                    <PasswordInput id="register-password" placeholder="至少 12 位，含大小写字母和数字" autoComplete="new-password" disabled={isProcessing} {...field} />
                   </FormControl>
                   <StrengthIndicator password={field.value} />
                   <FormMessage />
@@ -106,9 +113,9 @@ export function RegisterForm() {
               name="confirmPassword"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>确认主密码</FormLabel>
+                  <FormLabel htmlFor="register-confirm-password">确认主密码</FormLabel>
                   <FormControl>
-                    <PasswordInput placeholder="再次输入主密码" autoComplete="new-password" disabled={isProcessing} {...field} />
+                    <PasswordInput id="register-confirm-password" placeholder="再次输入主密码" autoComplete="new-password" disabled={isProcessing} {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>

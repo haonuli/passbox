@@ -121,7 +121,7 @@ export function ItemDetail({ itemId }: ItemDetailProps) {
       const result = await deleteItem(item.id);
       if (result.ok) {
         removeItem(item.id);
-        toast.success('条目已删除');
+        toast.success('条目已移入回收站');
         router.push('/vault');
       } else {
         toast.error(result.error);
@@ -199,12 +199,12 @@ export function ItemDetail({ itemId }: ItemDetailProps) {
           size="icon"
           variant="ghost"
           onClick={handleToggleFavorite}
-          aria-label="收藏"
+          aria-label={item.isFavorite ? '取消收藏' : '收藏'}
         >
           <Star
             className={
               item.isFavorite
-                ? 'h-4 w-4 fill-yellow-400 text-yellow-400'
+                ? 'h-4 w-4 fill-warning text-warning'
                 : 'h-4 w-4 text-muted-foreground'
             }
           />
@@ -213,6 +213,7 @@ export function ItemDetail({ itemId }: ItemDetailProps) {
           size="sm"
           variant="ghost"
           onClick={() => router.push(`/items/${item.id}/edit`)}
+          aria-label="编辑"
         >
           <Pencil className="h-4 w-4" />
           <span className="ml-1.5 hidden sm:inline">编辑</span>
@@ -222,6 +223,7 @@ export function ItemDetail({ itemId }: ItemDetailProps) {
           variant="ghost"
           onClick={() => setDeleteDialogOpen(true)}
           className="text-destructive hover:text-destructive"
+          aria-label="删除"
         >
           <Trash2 className="h-4 w-4" />
           <span className="ml-1.5 hidden sm:inline">删除</span>
@@ -312,7 +314,7 @@ export function ItemDetail({ itemId }: ItemDetailProps) {
           <DialogHeader>
             <DialogTitle>确认删除</DialogTitle>
             <DialogDescription>
-              确定删除「{item.title}」？此操作不可撤销。
+              确定删除「{item.title}」？条目将移入回收站，30 天内可在回收站恢复。
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

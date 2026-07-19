@@ -91,7 +91,7 @@ export function ImportStepPreview({ matches, onConfirm, onBack }: ImportStepPrev
         <div className="flex gap-4 text-xs text-muted-foreground">
           <span>共 {matches.length} 条</span>
           <span>新条目 {newCount} 条</span>
-          <span className="text-yellow-600">重复 {duplicateCount} 条</span>
+          <span className="text-warning">重复 {duplicateCount} 条</span>
           <span>已选 {selected.size} 条</span>
         </div>
       </div>
@@ -117,7 +117,7 @@ export function ImportStepPreview({ matches, onConfirm, onBack }: ImportStepPrev
                 key={index}
                 className={cn(
                   'border-b border-border last:border-0',
-                  match.isDuplicate && 'bg-yellow-50/50 dark:bg-yellow-950/10',
+                  match.isDuplicate && 'bg-warning/5',
                 )}
               >
                 <td className="p-2">
@@ -138,12 +138,12 @@ export function ImportStepPreview({ matches, onConfirm, onBack }: ImportStepPrev
                 </td>
                 <td className="p-2">
                   {match.isDuplicate ? (
-                    <span className="flex items-center gap-1 text-yellow-600">
+                    <span className="flex items-center gap-1 text-warning">
                       <AlertTriangle className="h-3 w-3" />
                       重复
                     </span>
                   ) : (
-                    <span className="flex items-center gap-1 text-green-600">
+                    <span className="flex items-center gap-1 text-success">
                       <CheckCircle2 className="h-3 w-3" />
                       新条目
                     </span>

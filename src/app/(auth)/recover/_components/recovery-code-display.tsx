@@ -36,8 +36,8 @@ export function RecoveryCodeDisplay({ recoveryCode }: RecoveryCodeDisplayProps) 
   return (
     <Card className="mx-auto w-full max-w-lg">
       <CardHeader className="space-y-2 text-center">
-        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-green-500/10">
-          <ShieldCheck className="h-6 w-6 text-green-500" />
+        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-success/10">
+          <ShieldCheck className="h-6 w-6 text-success" />
         </div>
         <CardTitle className="text-xl">主密码重置成功</CardTitle>
         <CardDescription>
@@ -48,7 +48,7 @@ export function RecoveryCodeDisplay({ recoveryCode }: RecoveryCodeDisplayProps) 
         <div className="space-y-2">
           <label className="text-sm font-medium">新恢复码</label>
           <div className="flex items-center gap-2">
-            <code className="flex-1 rounded-md border bg-muted px-4 py-3 text-center font-mono text-lg font-semibold tracking-wider select-all">
+            <code className="flex-1 rounded-sm border bg-muted px-4 py-3 text-center font-mono text-lg font-semibold tracking-wider select-all">
               {recoveryCode}
             </code>
             <Button type="button" variant="outline" size="icon" onClick={handleCopy} aria-label="复制恢复码">
@@ -57,10 +57,10 @@ export function RecoveryCodeDisplay({ recoveryCode }: RecoveryCodeDisplayProps) 
           </div>
         </div>
 
-        <div className="flex gap-3 rounded-md border border-yellow-500/30 bg-yellow-500/5 p-4">
-          <AlertTriangle className="h-5 w-5 flex-shrink-0 text-yellow-500" />
+        <div className="flex gap-3 rounded-md border border-warning/30 bg-warning/5 p-4">
+          <AlertTriangle className="h-5 w-5 flex-shrink-0 text-warning" />
           <div className="space-y-1 text-sm">
-            <p className="font-medium text-yellow-600 dark:text-yellow-500">重要提示</p>
+            <p className="font-medium text-warning">重要提示</p>
             <ul className="list-disc space-y-0.5 pl-4 text-muted-foreground">
               <li>旧恢复码已失效，请使用此新恢复码</li>
               <li>新恢复码仅显示一次，关闭后无法再次查看</li>

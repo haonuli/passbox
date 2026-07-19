@@ -5,8 +5,9 @@
  */
 'use client';
 
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useRef } from 'react';
 import { Shield, ShieldCheck, AlertTriangle, CheckCircle2, Clock } from 'lucide-react';
+import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { useVaultStore } from '@/stores/vault-store';
 import { detectDuplicatePasswords, type DuplicateGroup } from '@/lib/security/duplicate-check';
@@ -15,6 +16,8 @@ import { assessPassword } from '@/lib/crypto/strength';
 import { DuplicateList } from './duplicate-list';
 import { BreachList } from './breach-list';
 import { ExpiryList } from './expiry-list';
+
+const PREV_SCORE_KEY = 'passbox:security-score:prev';
 
 export function SecurityView() {
   const items = useVaultStore((s) => s.items);
@@ -68,8 +71,30 @@ export function SecurityView() {
     return Math.max(0, 100 - deduction);
   }, [items, weakPasswords, duplicates]);
 
-  const scoreColor = score > 80 ? 'text-green-500' : score >= 60 ? 'text-yellow-500' : 'text-red-500';
-  const scoreBg = score > 80 ? 'bg-green-500' : score >= 60 ? 'bg-yellow-500' : 'bg-red-500';
+  // DESIGN.md 语义色：success #0070f3 / warning #f5a623 / error #ee0000
+  const scoreColor = score > 80 ? 'text-success' : score >= 60 ? 'text-warning' : 'text-destructive';
+  const scoreBg = score > 80 ? 'bg-success' : score >= 60 ? 'bg-warning' : 'bg-destructive';
+
+  // 评分改善提示（UX-011 AC4）：编辑返回后若评分提升，显示 toast
+  const hasInitialized = useRef(false);
+  useEffect(() => {
+    if (loading) return;
+    if (!hasInitialized.current) {
+      hasInitialized.current = true;
+      sessionStorage.setItem(PREV_SCORE_KEY, String(score));
+      return;
+    }
+    const prevStr = sessionStorage.getItem(PREV_SCORE_KEY);
+    if (prevStr !== null) {
+      const prev = Number(prevStr);
+      if (!Number.isNaN(prev) && score > prev) {
+        toast.success(`安全评分已改善 ↑ ${score}`, {
+          description: `较上次提升 ${score - prev} 分`,
+        });
+      }
+    }
+    sessionStorage.setItem(PREV_SCORE_KEY, String(score));
+  }, [score, loading]);
 
   return (
     <div className="flex h-full flex-col">
@@ -82,14 +107,14 @@ export function SecurityView() {
       <div className="flex-1 overflow-auto p-4">
         <div className="mx-auto max-w-2xl space-y-6">
           {/* 安全评分 (T6.7) */}
-          <div className="rounded-lg border border-border p-6 text-center">
+          <div className="rounded-md border border-border bg-card p-6 text-center shadow-stack-2">
             <div className="text-xs text-muted-foreground">总体安全评分</div>
-            <div className={cn('mt-2 text-5xl font-bold tabular-nums', scoreColor)}>{score}</div>
+            <div className={cn('mt-2 text-5xl font-semibold tabular-nums tracking-tighter', scoreColor)}>{score}</div>
             <div className="mt-3 flex h-2 overflow-hidden rounded-full bg-muted">
               <div className={cn('h-full transition-all', scoreBg)} style={{ width: `${score}%` }} />
             </div>
             {score === 100 ? (
-              <p className="mt-3 flex items-center justify-center gap-1.5 text-sm text-green-500">
+              <p className="mt-3 flex items-center justify-center gap-1.5 text-sm text-success">
                 <ShieldCheck className="h-4 w-4" />
                 你的密码库很安全
               </p>
@@ -107,10 +132,10 @@ export function SecurityView() {
               className="flex w-full items-center justify-between border-b border-border pb-2"
             >
               <span className="flex items-center gap-2 text-sm font-semibold">
-                <AlertTriangle className="h-4 w-4 text-yellow-500" />
+                <AlertTriangle className="h-4 w-4 text-warning" />
                 弱密码
                 {weakPasswords.length > 0 && (
-                  <span className="rounded-full bg-yellow-500/10 px-2 py-0.5 text-xs text-yellow-600">
+                  <span className="rounded-full bg-warning/10 px-2 py-0.5 text-xs text-warning">
                     {weakPasswords.length}
                   </span>
                 )}
@@ -123,7 +148,7 @@ export function SecurityView() {
               <div className="mt-2 space-y-1">
                 {weakPasswords.length === 0 ? (
                   <div className="flex items-center gap-2 p-3">
-                    <CheckCircle2 className="h-4 w-4 text-green-500" />
+                    <CheckCircle2 className="h-4 w-4 text-success" />
                     <span className="text-sm">未发现弱密码</span>
                   </div>
                 ) : (
@@ -131,7 +156,7 @@ export function SecurityView() {
                     <a
                       key={item.id}
                       href={`/items/${item.id}/edit`}
-                      className="block rounded p-2 text-sm hover:bg-muted/50"
+                      className="block rounded-sm p-2 text-sm hover:bg-muted/50"
                     >
                       {item.title}
                     </a>
@@ -148,10 +173,10 @@ export function SecurityView() {
               className="flex w-full items-center justify-between border-b border-border pb-2"
             >
               <span className="flex items-center gap-2 text-sm font-semibold">
-                <AlertTriangle className="h-4 w-4 text-yellow-500" />
+                <AlertTriangle className="h-4 w-4 text-warning" />
                 重复密码
                 {duplicates.length > 0 && (
-                  <span className="rounded-full bg-yellow-500/10 px-2 py-0.5 text-xs text-yellow-600">
+                  <span className="rounded-full bg-warning/10 px-2 py-0.5 text-xs text-warning">
                     {duplicates.reduce((s, g) => s + g.items.length, 0)}
                   </span>
                 )}
@@ -174,7 +199,7 @@ export function SecurityView() {
               className="flex w-full items-center justify-between border-b border-border pb-2"
             >
               <span className="flex items-center gap-2 text-sm font-semibold">
-                <AlertTriangle className="h-4 w-4 text-red-500" />
+                <AlertTriangle className="h-4 w-4 text-destructive" />
                 泄露密码
               </span>
               <span className="text-xs text-muted-foreground">检测</span>
@@ -193,10 +218,10 @@ export function SecurityView() {
               className="flex w-full items-center justify-between border-b border-border pb-2"
             >
               <span className="flex items-center gap-2 text-sm font-semibold">
-                <Clock className="h-4 w-4 text-orange-500" />
+                <Clock className="h-4 w-4 text-warning" />
                 过期提醒
                 {getExpiryCount(items) > 0 && (
-                  <span className="rounded-full bg-red-500/10 px-2 py-0.5 text-xs text-red-600">
+                  <span className="rounded-full bg-destructive/10 px-2 py-0.5 text-xs text-destructive">
                     {getExpiryCount(items)}
                   </span>
                 )}

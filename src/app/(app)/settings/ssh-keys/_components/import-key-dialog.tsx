@@ -119,9 +119,9 @@ export function ImportKeyDialog({
 
         <div className="space-y-4 py-2">
           <div className="space-y-1.5">
-            <Label htmlFor="import-private-key">私钥</Label>
+            <Label htmlFor="ssh-private-key">私钥</Label>
             <textarea
-              id="import-private-key"
+              id="ssh-private-key"
               className={cn(TEXTAREA_CLASS, 'min-h-[140px]')}
               placeholder={'-----BEGIN OPENSSH PRIVATE KEY-----\n...'}
               value={privateKey}
@@ -137,7 +137,7 @@ export function ImportKeyDialog({
                   类型：{KEY_TYPE_LABELS[detectResult.keyType] ?? detectResult.keyType}
                 </span>
                 {detectResult.hasPassphrase && (
-                  <span className="text-amber-600 dark:text-amber-500">
+                  <span className="text-warning">
                     已加密（有口令）
                   </span>
                 )}
@@ -146,18 +146,18 @@ export function ImportKeyDialog({
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label htmlFor="import-hostname">主机名</Label>
+              <Label htmlFor="ssh-hostname">主机名</Label>
               <Input
-                id="import-hostname"
+                id="ssh-hostname"
                 placeholder="example.com"
                 value={hostname}
                 onChange={(e) => setHostname(e.target.value)}
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="import-username">用户名</Label>
+              <Label htmlFor="ssh-username">用户名</Label>
               <Input
-                id="import-username"
+                id="ssh-username"
                 placeholder="root"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}

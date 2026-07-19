@@ -40,7 +40,7 @@ const loginSchema = z.object({
 type LoginFormValues = z.infer<typeof loginSchema>;
 
 export function LoginForm() {
-  const { status, error, login, totpChallenge, completeTotpChallenge } = useSrpLogin();
+  const { status, error, errorType, login, totpChallenge, completeTotpChallenge } = useSrpLogin();
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -103,12 +103,15 @@ export function LoginForm() {
               name="email"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>邮箱地址</FormLabel>
+                  <FormLabel htmlFor="login-email">邮箱地址</FormLabel>
                   <FormControl>
                     <Input
+                      id="login-email"
                       type="email"
                       placeholder="you@example.com"
                       autoComplete="email"
+                      inputMode="email"
+                      autoFocus
                       disabled={isProcessing}
                       {...field}
                     />
@@ -124,9 +127,10 @@ export function LoginForm() {
               name="masterPassword"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>主密码</FormLabel>
+                  <FormLabel htmlFor="login-password">主密码</FormLabel>
                   <FormControl>
                     <PasswordInput
+                      id="login-password"
                       placeholder="输入主密码"
                       autoComplete="current-password"
                       disabled={isProcessing}
@@ -139,10 +143,14 @@ export function LoginForm() {
             />
 
             {/* 忘记主密码 */}
-            <div className="text-right">
+            <div className="flex items-center justify-end gap-1.5 text-sm">
+              <span className="text-xs text-muted-foreground" title="使用注册时生成的恢复码重置主密码">
+                使用恢复码重置
+              </span>
               <Link
                 href="/recover"
-                className="text-sm text-muted-foreground hover:text-primary hover:underline"
+                className="font-medium text-muted-foreground hover:text-primary hover:underline"
+                title="使用恢复码重置主密码"
               >
                 忘记主密码？
               </Link>
@@ -151,7 +159,26 @@ export function LoginForm() {
             {/* 错误提示 */}
             {error && (
               <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
-                {error}
+                <p>{error}</p>
+                {/* 根据错误类型显示恢复建议 */}
+                {errorType === 'credentials' && (
+                  <Link
+                    href="/recover"
+                    className="mt-1 inline-block font-medium text-destructive underline underline-offset-2 hover:opacity-80"
+                  >
+                    忘记主密码？
+                  </Link>
+                )}
+                {errorType === 'network' && (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    请检查网络连接后重试
+                  </p>
+                )}
+                {errorType === 'server' && (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    服务暂时不可用，请稍后重试
+                  </p>
+                )}
               </div>
             )}
 

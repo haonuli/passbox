@@ -102,9 +102,9 @@ export function VerifyPasswordDialog({
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-2">
-          <Label htmlFor="travel-mode-password">主密码</Label>
+          <Label htmlFor="travel-verify-password">主密码</Label>
           <PasswordInput
-            id="travel-mode-password"
+            id="travel-verify-password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             placeholder="请输入主密码"

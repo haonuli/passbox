@@ -17,7 +17,6 @@ import {
   Trash2,
   Star,
   Share2,
-  Copy,
   ExternalLink,
   Loader2,
   MousePointerClick,
@@ -34,15 +33,16 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { useVaultStore } from '@/stores/vault-store';
-import { useSettingsStore } from '@/stores/settings-store';
 import { deleteItem, toggleFavorite } from '@/actions/item';
-import { useClipboard } from '@/hooks/use-clipboard';
+import { restoreItem } from '@/actions/trash';
+import { CopyButton } from '@/components/copy-button';
 import { TotpDisplay } from '@/components/item/totp-display';
 import { FaviconImage } from '@/components/favicon-image';
 import { getItemTypeConfigByCode, getFieldIcon, type FieldConfig } from '@/lib/item-types';
 import { ShareDialog } from '@/app/(app)/settings/shares/_components/share-dialog';
 import { HistoryDialog } from '@/app/(app)/items/_components/history-dialog';
 import { AttachmentSection } from './attachment-section';
+import type { DecryptedItem } from '@/types/vault';
 
 interface ItemDetailPanelProps {
   itemId: string | null;
@@ -58,11 +58,9 @@ function FieldIcon({ name, className }: { name: string; className?: string }) {
 function DetailField({
   field,
   value,
-  onCopy,
 }: {
   field: FieldConfig;
   value: string;
-  onCopy?: (value: string, label: string) => void;
 }) {
   const [show, setShow] = useState(false);
   const isPassword = field.type === 'password';
@@ -76,7 +74,7 @@ function DetailField({
           {isPassword && !show ? '••••••••' : value}
         </div>
       </div>
-      <div className="flex shrink-0 gap-1">
+      <div className="flex shrink-0 items-center gap-1">
         {isPassword && (
           <button
             type="button"
@@ -87,15 +85,13 @@ function DetailField({
             {show ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
           </button>
         )}
-        {onCopy && (
-          <button
-            type="button"
-            onClick={() => onCopy(value, field.label)}
-            className="text-muted-foreground hover:text-foreground"
-            aria-label={`复制${field.label}`}
-          >
-            <Copy className="h-4 w-4" />
-          </button>
+        {field.copyable && (
+          <CopyButton
+            value={value}
+            label={field.label}
+            sensitive={isPassword}
+            clearAfterSeconds={isPassword ? 30 : 0}
+          />
         )}
       </div>
     </div>
@@ -121,13 +117,12 @@ export function ItemDetailPanel({ itemId, onBack }: ItemDetailPanelProps) {
   const router = useRouter();
   const items = useVaultStore((s) => s.items);
   const removeItem = useVaultStore((s) => s.removeItem);
+  const upsertItem = useVaultStore((s) => s.upsertItem);
   const updateFavorite = useVaultStore((s) => s.updateFavorite);
   const [deleting, setDeleting] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [historyDialogOpen, setHistoryDialogOpen] = useState(false);
-  const { copy } = useClipboard();
-  const clipboardClearSeconds = useSettingsStore((s) => s.clipboardClearSeconds);
 
   const item = useMemo(
     () => (itemId ? items.find((i) => i.id === itemId) : undefined),
@@ -139,15 +134,41 @@ export function ItemDetailPanel({ itemId, onBack }: ItemDetailPanelProps) {
     [item],
   );
 
+  // D-11：撤销删除，调用 restoreItem 恢复软删除的条目（保留原 ID 与 updated_at）
+  const handleUndoDelete = useCallback(
+    async (snapshot: DecryptedItem) => {
+      try {
+        const result = await restoreItem(snapshot.id);
+        if (result.ok) {
+          upsertItem(snapshot);
+          toast.success('已撤销删除');
+        } else {
+          toast.error(result.error);
+        }
+      } catch {
+        toast.error('撤销失败，请稍后重试');
+      }
+    },
+    [upsertItem],
+  );
+
   const handleDelete = useCallback(async () => {
     if (!item) return;
     setDeleting(true);
     try {
       const result = await deleteItem(item.id);
       if (result.ok) {
+        // D-11：软删除（移入回收站），5s 内可撤销；30 天内可在回收站恢复
+        const snapshot: DecryptedItem = { ...item };
         removeItem(item.id);
-        toast.success('条目已删除');
         onBack();
+        toast.success('条目已移入回收站', {
+          duration: 5000,
+          action: {
+            label: '撤销',
+            onClick: () => void handleUndoDelete(snapshot),
+          },
+        });
       } else {
         toast.error(result.error);
       }
@@ -157,7 +178,7 @@ export function ItemDetailPanel({ itemId, onBack }: ItemDetailPanelProps) {
       setDeleting(false);
       setDeleteDialogOpen(false);
     }
-  }, [item, removeItem, onBack]);
+  }, [item, removeItem, onBack, handleUndoDelete]);
 
   const handleToggleFavorite = useCallback(async () => {
     if (!item) return;
@@ -174,13 +195,6 @@ export function ItemDetailPanel({ itemId, onBack }: ItemDetailPanelProps) {
       toast.error('更新收藏状态失败');
     }
   }, [item, updateFavorite]);
-
-  const handleCopy = useCallback(
-    (value: string, label: string, sensitive: boolean) => {
-      copy(value, sensitive ? clipboardClearSeconds : 0, label);
-    },
-    [copy, clipboardClearSeconds],
-  );
 
   const handleOpenWebsite = useCallback((url: string) => {
     let finalUrl = url;
@@ -210,9 +224,9 @@ export function ItemDetailPanel({ itemId, onBack }: ItemDetailPanelProps) {
           variant="ghost"
           onClick={onBack}
           aria-label="返回列表"
-          className="md:hidden"
+          className="md:hidden h-11 w-11"
         >
-          <ArrowLeft className="h-4 w-4" />
+          <ArrowLeft className="h-5 w-5" />
         </Button>
         <FaviconImage
           url={item.data.url}
@@ -224,12 +238,12 @@ export function ItemDetailPanel({ itemId, onBack }: ItemDetailPanelProps) {
           size="icon"
           variant="ghost"
           onClick={handleToggleFavorite}
-          aria-label="收藏"
+          aria-label={item.isFavorite ? '取消收藏' : '收藏'}
         >
           <Star
             className={
               item.isFavorite
-                ? 'h-4 w-4 fill-yellow-400 text-yellow-400'
+                ? 'h-4 w-4 fill-warning text-warning'
                 : 'h-4 w-4 text-muted-foreground'
             }
           />
@@ -238,6 +252,7 @@ export function ItemDetailPanel({ itemId, onBack }: ItemDetailPanelProps) {
           size="sm"
           variant="ghost"
           onClick={() => setShareDialogOpen(true)}
+          aria-label="分享"
         >
           <Share2 className="h-4 w-4" />
           <span className="ml-1.5 hidden sm:inline">分享</span>
@@ -246,6 +261,7 @@ export function ItemDetailPanel({ itemId, onBack }: ItemDetailPanelProps) {
           size="sm"
           variant="ghost"
           onClick={() => setHistoryDialogOpen(true)}
+          aria-label="历史"
         >
           <History className="h-4 w-4" />
           <span className="ml-1.5 hidden sm:inline">历史</span>
@@ -254,6 +270,7 @@ export function ItemDetailPanel({ itemId, onBack }: ItemDetailPanelProps) {
           size="sm"
           variant="ghost"
           onClick={() => router.push(`/items/${item.id}/edit`)}
+          aria-label="编辑"
         >
           <Pencil className="h-4 w-4" />
           <span className="ml-1.5 hidden sm:inline">编辑</span>
@@ -263,6 +280,7 @@ export function ItemDetailPanel({ itemId, onBack }: ItemDetailPanelProps) {
           variant="ghost"
           onClick={() => setDeleteDialogOpen(true)}
           className="text-destructive hover:text-destructive"
+          aria-label="删除"
         >
           <Trash2 className="h-4 w-4" />
           <span className="ml-1.5 hidden sm:inline">删除</span>
@@ -279,11 +297,6 @@ export function ItemDetailPanel({ itemId, onBack }: ItemDetailPanelProps) {
               key={field.name}
               field={field}
               value={value}
-              onCopy={
-                field.copyable
-                  ? (v, label) => handleCopy(v, label, field.type === 'password')
-                  : undefined
-              }
             />
           );
         })}
@@ -345,7 +358,7 @@ export function ItemDetailPanel({ itemId, onBack }: ItemDetailPanelProps) {
           <DialogHeader>
             <DialogTitle>确认删除</DialogTitle>
             <DialogDescription>
-              确定删除「{item.title}」？此操作不可撤销。
+              确定删除「{item.title}」？条目将移入回收站，30 天内可在回收站恢复。
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

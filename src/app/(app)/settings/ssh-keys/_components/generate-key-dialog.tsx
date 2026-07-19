@@ -141,9 +141,9 @@ export function GenerateKeyDialog({
               </div>
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="ssh-comment">注释</Label>
+              <Label htmlFor="ssh-key-comment">注释</Label>
               <Input
-                id="ssh-comment"
+                id="ssh-key-comment"
                 placeholder="user@hostname（可选）"
                 value={comment}
                 onChange={(e) => setComment(e.target.value)}

@@ -49,6 +49,8 @@ export function ImportWizard() {
   const [csvContent, setCsvContent] = useState<string>('');
   const [duplicateMatches, setDuplicateMatches] = useState<DuplicateMatch[]>([]);
   const [importSummary, setImportSummary] = useState<ImportSummary | null>(null);
+  // UX-033：导入过程进度反馈
+  const [importProgress, setImportProgress] = useState<{ done: number; total: number } | null>(null);
 
   const items = useVaultStore((s) => s.items);
   const vaults = useVaultStore((s) => s.vaults);
@@ -113,6 +115,9 @@ export function ImportWizard() {
   const handleConfirmImport = useCallback(
     async (matches: DuplicateMatch[]) => {
       setStep('importing');
+      // UX-033：初始化进度
+      const totalToProcess = matches.filter((m) => m.action !== 'skip').length;
+      setImportProgress({ done: 0, total: totalToProcess });
 
       const summary: ImportSummary = {
         total: matches.length,
@@ -127,6 +132,7 @@ export function ImportWizard() {
         summary.errors.push('密码库未解锁，无法导入');
         setImportSummary(summary);
         setStep('result');
+        setImportProgress(null);
         return;
       }
 
@@ -135,6 +141,7 @@ export function ImportWizard() {
         summary.errors.push('未找到可用的保险库');
         setImportSummary(summary);
         setStep('result');
+        setImportProgress(null);
         return;
       }
 
@@ -150,6 +157,12 @@ export function ImportWizard() {
           toOverwrite.push(match);
         }
       }
+
+      let processed = 0;
+      const updateProgress = (delta: number) => {
+        processed += delta;
+        setImportProgress({ done: processed, total: totalToProcess });
+      };
 
       // 批量创建
       for (let i = 0; i < toImport.length; i += BATCH_SIZE) {
@@ -189,6 +202,7 @@ export function ImportWizard() {
             summary.errors.push(result.error);
           }
         }
+        updateProgress(batch.length);
       }
 
       // 批量更新（覆盖）
@@ -226,10 +240,12 @@ export function ImportWizard() {
             summary.errors.push(result.error);
           }
         }
+        updateProgress(batch.length);
       }
 
       setImportSummary(summary);
       setStep('result');
+      setImportProgress(null);
       toast.success(`导入完成：成功 ${summary.imported} 条，覆盖 ${summary.overwritten} 条`);
     },
     [symmetricKey, vaults],
@@ -241,6 +257,7 @@ export function ImportWizard() {
     setCsvContent('');
     setDuplicateMatches([]);
     setImportSummary(null);
+    setImportProgress(null);
   };
 
   return (
@@ -311,9 +328,32 @@ export function ImportWizard() {
           />
         )}
         {step === 'importing' && (
-          <div className="flex flex-col items-center gap-3 py-8">
+          <div className="flex flex-col items-center gap-4 py-8">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
-            <div className="text-sm text-muted-foreground">正在导入数据，请稍候…</div>
+            <div className="text-sm text-muted-foreground">
+              正在导入数据，请稍候…
+            </div>
+            {/* UX-033：导入进度显示 */}
+            {importProgress && (
+              <div className="w-full max-w-sm space-y-1.5">
+                <div className="flex items-center justify-between text-xs text-muted-foreground">
+                  <span>已处理 {importProgress.done} / {importProgress.total} 条</span>
+                  <span className="tabular-nums">
+                    {importProgress.total > 0
+                      ? `${Math.round((importProgress.done / importProgress.total) * 100)}%`
+                      : '0%'}
+                  </span>
+                </div>
+                <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                  <div
+                    className="h-full bg-primary transition-all"
+                    style={{
+                      width: `${importProgress.total > 0 ? (importProgress.done / importProgress.total) * 100 : 0}%`,
+                    }}
+                  />
+                </div>
+              </div>
+            )}
           </div>
         )}
         {step === 'result' && importSummary && (

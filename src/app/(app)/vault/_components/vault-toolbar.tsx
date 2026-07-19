@@ -1,12 +1,12 @@
 /**
  * 密码库工具栏 (T4.4)
  *
- * 包含：筛选标签（全部 / 收藏）+ 新建按钮。
+ * 包含：筛选标签（全部 / 收藏）+ 多选按钮 + 新建按钮。
  */
 'use client';
 
 import Link from 'next/link';
-import { Plus, Star, List } from 'lucide-react';
+import { Plus, Star, List, CheckSquare } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 
@@ -17,6 +17,10 @@ interface VaultToolbarProps {
   onFilterChange: (filter: FilterType) => void;
   totalCount: number;
   favoritesCount: number;
+  /** 是否处于多选模式 */
+  selectionMode?: boolean;
+  /** 进入多选模式 */
+  onEnterSelection?: () => void;
 }
 
 export function VaultToolbar({
@@ -24,6 +28,8 @@ export function VaultToolbar({
   onFilterChange,
   totalCount,
   favoritesCount,
+  selectionMode = false,
+  onEnterSelection,
 }: VaultToolbarProps) {
   return (
     <div className="flex items-center justify-between border-b border-border px-4 py-2">
@@ -55,12 +61,26 @@ export function VaultToolbar({
           <span className="ml-1 text-xs opacity-70">{favoritesCount}</span>
         </button>
       </div>
-      <Button size="sm" asChild>
-        <Link href="/items/new">
-          <Plus className="h-4 w-4" />
-          新建
-        </Link>
-      </Button>
+      <div className="flex items-center gap-1">
+        {!selectionMode && (
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={onEnterSelection}
+            className="px-2"
+            aria-label="多选"
+            title="多选管理"
+          >
+            <CheckSquare className="h-4 w-4" />
+          </Button>
+        )}
+        <Button size="sm" asChild>
+          <Link href="/items/new">
+            <Plus className="h-4 w-4" />
+            新建
+          </Link>
+        </Button>
+      </div>
     </div>
   );
 }

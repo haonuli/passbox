@@ -65,7 +65,7 @@ function ExpiryGroup({
         return (
           <Link
             key={result.item.id}
-            href={`/items/${result.item.id}`}
+            href={`/items/${result.item.id}/edit`}
             className="flex items-center justify-between gap-2 rounded-md border border-border p-3 transition-colors hover:bg-muted/50"
           >
             <div className="flex min-w-0 items-center gap-2">
@@ -94,7 +94,7 @@ export function ExpiryList({ items: propItems }: ExpiryListProps) {
   if (results.length === 0) {
     return (
       <div className="flex items-center gap-2 p-4">
-        <CheckCircle2 className="h-5 w-5 text-green-500" />
+        <CheckCircle2 className="h-5 w-5 text-success" />
         <span className="text-sm">未发现即将过期的条目</span>
       </div>
     );
@@ -107,13 +107,13 @@ export function ExpiryList({ items: propItems }: ExpiryListProps) {
   return (
     <div className="space-y-3">
       {expired.length > 0 && (
-        <ExpiryGroup title="已过期" results={expired} icon={AlertTriangle} iconColor="text-red-500" />
+        <ExpiryGroup title="已过期" results={expired} icon={AlertTriangle} iconColor="text-destructive" />
       )}
       {soon.length > 0 && (
-        <ExpiryGroup title="30 天内过期" results={soon} icon={Clock} iconColor="text-yellow-500" />
+        <ExpiryGroup title="30 天内过期" results={soon} icon={Clock} iconColor="text-warning" />
       )}
       {upcoming.length > 0 && (
-        <ExpiryGroup title="90 天内过期" results={upcoming} icon={Calendar} iconColor="text-blue-500" />
+        <ExpiryGroup title="90 天内过期" results={upcoming} icon={Calendar} iconColor="text-success" />
       )}
     </div>
   );
