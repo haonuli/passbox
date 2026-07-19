@@ -29,12 +29,15 @@ export function TotpDisplay({ base32Secret }: TotpDisplayProps) {
   const isLow = remaining <= 5;
 
   return (
-    <div className="flex items-center gap-3 rounded-md border border-border p-3">
+    <div className="flex items-center gap-3 rounded-sm border border-border p-3 shadow-stack-1">
       <div className="flex-1">
         <div className="text-xs text-muted-foreground">一次性验证码</div>
         <button
           onClick={() => copy(code, 10, '验证码')}
-          className="mt-0.5 flex items-center gap-1.5 text-2xl font-bold tracking-widest tabular-nums hover:text-primary"
+          className={cn(
+            'mt-0.5 flex items-center gap-1.5 font-mono text-2xl font-semibold tracking-widest tabular-nums hover:text-primary',
+            isLow && 'animate-pulse text-destructive',
+          )}
         >
           {code.slice(0, 3)} {code.slice(3)}
           <Copy className="h-3.5 w-3.5 text-muted-foreground" />
@@ -56,13 +59,16 @@ export function TotpDisplay({ base32Secret }: TotpDisplayProps) {
             strokeWidth="2.5"
             strokeDasharray={`${2 * Math.PI * 16}`}
             strokeDashoffset={`${2 * Math.PI * 16 * (1 - progressPercent / 100)}`}
-            className={cn('transition-all duration-1000 ease-linear', isLow ? 'text-red-500' : 'text-primary')}
+            className={cn(
+              'transition-all duration-1000 ease-linear',
+              isLow ? 'text-destructive animate-pulse' : 'text-primary',
+            )}
             strokeLinecap="round"
           />
         </svg>
         <span className={cn(
           'absolute inset-0 flex items-center justify-center text-xs font-medium tabular-nums',
-          isLow ? 'text-red-500' : 'text-muted-foreground',
+          isLow ? 'text-destructive animate-pulse' : 'text-muted-foreground',
         )}>
           {remaining}
         </span>

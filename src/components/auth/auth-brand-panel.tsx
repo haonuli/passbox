@@ -1,8 +1,9 @@
 /**
- * 认证页面左侧品牌展示面板
+ * 认证页面左侧品牌展示面板 — 对齐 DESIGN.md
  *
- * 在登录/注册/恢复页面中作为左侧品牌区域，
- * 展示产品标识、核心价值主张和安全特性。
+ * - ink 主色背景 + mesh 渐变叠加（cyan/blue/magenta/amber 微透明）
+ * - 标题 Geist Sans + 负字距
+ * - 安全特性列表使用 ink 上的半透明白色容器
  */
 import { Shield, Lock, EyeOff } from 'lucide-react';
 
@@ -33,29 +34,44 @@ const SECURITY_FEATURES: SecurityFeature[] = [
 export function AuthBrandPanel() {
   return (
     <div className="relative flex h-full flex-col justify-between overflow-hidden bg-primary p-12 text-primary-foreground">
-      {/* 装饰性渐变背景 */}
+      {/* mesh 渐变叠加 — 品牌装饰，仅大尺度 */}
       <div
-        className="pointer-events-none absolute inset-0 opacity-20"
+        className="pointer-events-none absolute inset-0 opacity-60"
         style={{
           background:
-            'radial-gradient(circle at 20% 20%, rgba(255,255,255,0.15) 0%, transparent 50%), radial-gradient(circle at 80% 80%, rgba(255,255,255,0.1) 0%, transparent 50%)',
+            'radial-gradient(ellipse 50% 40% at 15% 20%, rgba(80, 227, 194, 0.25), transparent 60%),' +
+            'radial-gradient(ellipse 50% 50% at 85% 15%, rgba(0, 124, 240, 0.30), transparent 60%),' +
+            'radial-gradient(ellipse 50% 40% at 80% 85%, rgba(255, 0, 128, 0.22), transparent 60%),' +
+            'radial-gradient(ellipse 50% 50% at 20% 75%, rgba(249, 203, 40, 0.18), transparent 60%)',
         }}
+        aria-hidden
+      />
+      {/* 极细网格叠加 */}
+      <div
+        className="pointer-events-none absolute inset-0 opacity-15"
+        style={{
+          backgroundImage:
+            'linear-gradient(to right, rgba(255,255,255,0.15) 1px, transparent 1px),' +
+            'linear-gradient(to bottom, rgba(255,255,255,0.15) 1px, transparent 1px)',
+          backgroundSize: '64px 64px',
+        }}
+        aria-hidden
       />
 
       {/* 顶部品牌标识 */}
       <div className="relative z-10">
-        <h1 className="text-2xl font-bold tracking-tight">PassBox</h1>
-        <p className="mt-1 text-sm text-primary-foreground/70">
+        <h1 className="text-2xl font-semibold tracking-tight">PassBox</h1>
+        <p className="mt-1 font-mono text-xs text-primary-foreground/60">
           零知识密码管理器
         </p>
       </div>
 
-      {/* 中间价值主张 */}
+      {/* 中间价值主张 — Geist Sans + 负字距 */}
       <div className="relative z-10 max-w-sm">
-        <h2 className="text-3xl font-bold leading-tight tracking-tight">
+        <h2 className="text-3xl font-semibold leading-tight tracking-tight">
           您的密码，
           <br />
-          只有您能解开
+          只有您能解开.
         </h2>
         <p className="mt-4 text-sm leading-relaxed text-primary-foreground/80">
           端到端加密的密码管理器，您的数据在离开设备前就已加密。
@@ -69,7 +85,7 @@ export function AuthBrandPanel() {
           const Icon = feature.icon;
           return (
             <div key={feature.title} className="flex items-start gap-3">
-              <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary-foreground/10">
+              <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-primary-foreground/15 bg-primary-foreground/5">
                 <Icon className="h-4 w-4" />
               </div>
               <div>

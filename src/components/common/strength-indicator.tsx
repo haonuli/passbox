@@ -15,10 +15,11 @@ import { useState, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import { assessPassword, type StrengthLabel } from '@/lib/crypto/strength';
 
+// DESIGN.md 语义色：weak=error #ee0000 / fair=warning #f5a623 / strong=success #0070f3
 const LABEL_CONFIG: Record<StrengthLabel, { text: string; barClass: string; textClass: string; segments: number }> = {
-  weak: { text: '弱', barClass: 'bg-red-500', textClass: 'text-red-500', segments: 1 },
-  fair: { text: '中', barClass: 'bg-yellow-500', textClass: 'text-yellow-500', segments: 2 },
-  strong: { text: '强', barClass: 'bg-green-500', textClass: 'text-green-500', segments: 3 },
+  weak: { text: '弱', barClass: 'bg-destructive', textClass: 'text-destructive', segments: 1 },
+  fair: { text: '中', barClass: 'bg-warning', textClass: 'text-warning', segments: 2 },
+  strong: { text: '强', barClass: 'bg-success', textClass: 'text-success', segments: 3 },
 };
 
 interface StrengthIndicatorProps {

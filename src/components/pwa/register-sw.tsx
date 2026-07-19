@@ -10,13 +10,15 @@ import { useEffect, useState, useCallback } from 'react';
 
 /** 在线状态 Hook */
 export function useOnlineStatus(): boolean {
-  const [online, setOnline] = useState(true);
+  // lazy initializer 避免 effect 内 setState（SSR 安全：服务器上 navigator 不存在时默认 true）
+  const [online, setOnline] = useState(() =>
+    typeof navigator !== 'undefined' ? navigator.onLine : true,
+  );
 
   useEffect(() => {
     const handleOnline = () => setOnline(true);
     const handleOffline = () => setOnline(false);
 
-    setOnline(navigator.onLine);
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
 
@@ -49,14 +51,21 @@ export function OfflineIndicator() {
 
   const handleDismiss = useCallback(() => setDismissed(true), []);
 
-  useEffect(() => {
+  // 从 online 切换到 offline 时重置 dismissed（render-time setState，替代 effect）
+  // 参考：https://react.dev/learn/you-might-not-need-an-effect#adjusting-some-state-when-a-prop-changes
+  const [prevOnline, setPrevOnline] = useState(online);
+  if (online !== prevOnline) {
+    setPrevOnline(online);
     if (!online) setDismissed(false);
-  }, [online]);
+  }
+
+  // dev 模式下不显示离线提示，避免 DevTools Offline 调试或扩展干扰造成误报
+  if (process.env.NODE_ENV !== 'production') return null;
 
   if (online || dismissed) return null;
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-50 bg-yellow-500 px-4 py-2 text-center text-sm font-medium text-black">
+    <div className="fixed bottom-0 left-0 right-0 z-50 bg-warning px-4 py-2 text-center text-sm font-medium text-warning-foreground">
       <span>当前处于离线模式，部分功能不可用</span>
       <button
         onClick={handleDismiss}

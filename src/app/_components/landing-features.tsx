@@ -1,113 +1,255 @@
 /**
- * 落地页功能区
- *
- * 包含核心统计数据展示 + 6 个功能特性卡片。
+ * 落地页功能区 — 对齐 DESIGN.md
+ * - 分组标题 Geist Sans + 负字距，eyebrow 用 caption-mono
+ * - 特性卡片 marketing-card 8px 圆角 + Level 3 堆叠阴影
+ * - highlight 标记改为 ink 主色徽章（不再使用翡翠绿）
  */
-import { EyeOff, Lock, KeyRound, Shield, RefreshCw, Layers } from 'lucide-react';
+import {
+  KeyRound,
+  Puzzle,
+  Smartphone,
+  ShieldCheck,
+  Plane,
+  Trash2,
+  Paperclip,
+  Lock,
+  Eye,
+  Search,
+  ListChecks,
+  CreditCard,
+  KeySquare,
+  Timer,
+  RotateCcw,
+  Gauge,
+  LogOut,
+} from 'lucide-react';
 
-interface Feature {
-  icon: typeof Shield;
+interface FeatureGroup {
+  id: string;
+  tag: string;
+  icon: typeof KeyRound;
   title: string;
   description: string;
-  tag: string;
+  features: Feature[];
 }
 
-const STATS = [
-  { value: '256-bit', label: 'AES-GCM 加密' },
-  { value: '0', label: '服务器可读数据' },
-  { value: '16', label: '内置条目类型' },
-  { value: '2FA', label: '双因素认证' },
-];
+interface Feature {
+  icon: typeof KeyRound;
+  title: string;
+  description: string;
+  highlight?: boolean;
+}
 
-const FEATURES: Feature[] = [
+const FEATURE_GROUPS: FeatureGroup[] = [
   {
-    icon: EyeOff,
-    title: '零知识加密',
-    description: '主密码永远不会上传服务器。所有加密解密都在你的设备上完成，服务器只存储密文。',
-    tag: '核心架构',
-  },
-  {
-    icon: Lock,
-    title: 'AES-256-GCM',
-    description: '采用 Argon2id 密钥派生函数 + AES-256-GCM 认证加密，抵御暴力破解和选择密文攻击。',
-    tag: '加密算法',
-  },
-  {
+    id: 'password-management',
+    tag: '02',
     icon: KeyRound,
-    title: '密码生成器',
-    description: '内置强密码生成器，支持自定义长度、字符集，自动避免易混淆字符，实时评估密码强度。',
-    tag: '密码工具',
+    title: '密码管理',
+    description: '覆盖全部密码管理场景，16 种条目类型满足个人与工作所需',
+    features: [
+      {
+        icon: KeySquare,
+        title: '16 种条目类型',
+        description: '登录、信用卡、身份、银行账户、API 密钥、SSH 密钥、加密钱包等，一站式管理。',
+        highlight: true,
+      },
+      {
+        icon: Search,
+        title: '智能本地搜索',
+        description: '搜索完全在客户端进行，不上传关键词，支持模糊匹配与标签筛选。',
+      },
+      {
+        icon: ListChecks,
+        title: '批量管理',
+        description: '支持批量删除、批量移动到其他保险库，多选操作流畅高效。',
+      },
+      {
+        icon: Eye,
+        title: '按需解密',
+        description: '敏感数据仅在查看时解密，离开详情页立即清除内存中的明文。',
+        highlight: true,
+      },
+    ],
   },
   {
-    icon: Shield,
-    title: '双因素认证',
-    description: '支持 TOTP 双因素认证，提供 10 个一次性备用码。即使主密码泄露，账户依然安全。',
-    tag: '账户安全',
+    id: 'browser-extension',
+    tag: '03',
+    icon: Puzzle,
+    title: '浏览器扩展',
+    description: 'Chrome / Edge 扩展自动识别表单，一键填充凭证',
+    features: [
+      {
+        icon: Puzzle,
+        title: '智能表单填充',
+        description: '基于 autocomplete 属性与 name/id 模式匹配，自动识别登录、地址、信用卡表单。',
+        highlight: true,
+      },
+      {
+        icon: CreditCard,
+        title: '信用卡与地址',
+        description: '不仅填充密码，还支持自动填充信用卡号、有效期、CVV 与个人地址信息。',
+      },
+      {
+        icon: Smartphone,
+        title: '用户确认机制',
+        description: '每次自动填充前弹出确认浮窗，避免误填充与恶意页面窃取。',
+        highlight: true,
+      },
+    ],
   },
   {
-    icon: RefreshCw,
-    title: '恢复码机制',
-    description: '忘记主密码？通过 80 位熵的恢复码安全重置主密码，密码库数据完整保留。',
-    tag: '数据恢复',
+    id: 'security',
+    tag: '04',
+    icon: ShieldCheck,
+    title: '安全增强',
+    description: '多层防御纵深，从协议层到应用层全方位保护账户',
+    features: [
+      {
+        icon: Timer,
+        title: 'TOTP 双因素认证',
+        description: '内置 RFC 6238 TOTP 生成器，支持 SHA-1/256/512 算法，提供 10 个一次性备用码。',
+        highlight: true,
+      },
+      {
+        icon: RotateCcw,
+        title: '恢复码机制',
+        description: '80 位熵的恢复码，忘记主密码也能安全重置，密码库数据完整保留。',
+      },
+      {
+        icon: Gauge,
+        title: '速率限制',
+        description: 'IP + email 双维度限流（登录 10/min，注册 5/min），防暴力破解与撞库。',
+        highlight: true,
+      },
+      {
+        icon: LogOut,
+        title: '会话撤销',
+        description: '24h 有效期 + token_version 机制，改密或登出后旧 JWT 立即失效。',
+      },
+    ],
   },
   {
-    icon: Layers,
-    title: '16 种条目类型',
-    description: '登录凭证、信用卡、身份信息、银行账户、API 密钥等 16 种类型，覆盖全部密码管理场景。',
-    tag: '数据管理',
+    id: 'advanced',
+    tag: '05',
+    icon: Plane,
+    title: '高级功能',
+    description: '为特殊场景设计的细节能力',
+    features: [
+      {
+        icon: Plane,
+        title: '旅行模式',
+        description: '出国时仅携带旅行保险库，敏感数据完全从本地清除，过海关无忧。',
+        highlight: true,
+      },
+      {
+        icon: Trash2,
+        title: '回收站 30 天',
+        description: '删除的条目进入回收站，30 天内可恢复，过期自动永久清除。',
+      },
+      {
+        icon: Paperclip,
+        title: '加密附件',
+        description: '支持上传文件附件，附件内容客户端加密后上传，服务端无法读取。',
+      },
+      {
+        icon: Lock,
+        title: '分享链接',
+        description: '生成加密分享链接，支持过期时间与查看次数限制，安全共享密码。',
+      },
+    ],
   },
 ];
 
 export function LandingFeatures() {
   return (
-    <section className="relative border-t border-border py-24">
+    <section className="relative border-t border-border py-24 sm:py-32">
       <div className="mx-auto max-w-6xl px-6">
-        {/* 统计数据 */}
-        <div className="mb-24 grid grid-cols-2 gap-8 lg:grid-cols-4">
-          {STATS.map((stat) => (
-            <div key={stat.label} className="text-center">
-              <div className="text-4xl font-bold tracking-tight text-foreground sm:text-5xl">
-                {stat.value}
-              </div>
-              <div className="mt-2 text-sm text-muted-foreground">{stat.label}</div>
-            </div>
-          ))}
-        </div>
-
-        {/* 区块标题 */}
-        <div className="mb-12 text-center">
-          <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
-            为安全而生的每一个细节
+        {/* 区块总标题 */}
+        <div className="mb-20 max-w-2xl">
+          <span className="tech-tag">
+            <span className="code-brand font-mono">02-05</span>
+            功能矩阵
+          </span>
+          <h2 className="mt-4 text-4xl font-semibold tracking-tighter sm:text-5xl">
+            不只是密码管理器
+            <br />
+            <span className="text-muted-foreground">
+              是一套完整的密码学工具箱.
+            </span>
           </h2>
-          <p className="mt-4 text-base text-muted-foreground">
-            从加密算法到用户体验，全方位保障你的密码安全
-          </p>
         </div>
 
-        {/* 功能卡片网格 */}
-        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {FEATURES.map((feature) => {
-            const Icon = feature.icon;
+        {/* 按场景分组渲染 */}
+        <div className="flex flex-col gap-24">
+          {FEATURE_GROUPS.map((group) => {
+            const GroupIcon = group.icon;
             return (
-              <div
-                key={feature.title}
-                className="landing-feature-card group flex flex-col gap-3 rounded-xl border border-border bg-card/30 p-6"
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex h-11 w-11 items-center justify-center rounded-lg border border-border bg-background transition-colors group-hover:border-primary/40">
-                    <Icon className="h-5 w-5 text-primary" />
+              <div key={group.id} id={group.id} className="scroll-mt-24">
+                {/* 分组标题 — 左侧 ink 主色竖线指示器 */}
+                <div className="mb-10 flex items-start gap-4 border-l-2 border-foreground pl-6">
+                  <div className="flex -ml-[1.625rem] mt-1 h-10 w-10 items-center justify-center rounded-md border border-border bg-background shadow-stack-2">
+                    <GroupIcon className="h-5 w-5 text-foreground" />
                   </div>
-                  <span className="rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
-                    {feature.tag}
-                  </span>
+                  <div className="flex-1">
+                    <div className="flex items-center gap-3">
+                      <span className="font-mono text-xs text-muted-foreground">
+                        {'// '}{group.tag}
+                      </span>
+                      <h3 className="text-2xl font-semibold tracking-tight sm:text-3xl">
+                        {group.title}
+                      </h3>
+                    </div>
+                    <p className="mt-2 text-sm text-muted-foreground">{group.description}</p>
+                  </div>
                 </div>
-                <h3 className="text-base font-semibold">{feature.title}</h3>
-                <p className="text-sm leading-relaxed text-muted-foreground">
-                  {feature.description}
-                </p>
+
+                {/* 分组特性卡片 — marketing-card */}
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                  {group.features.map((feature) => {
+                    const Icon = feature.icon;
+                    return (
+                      <div
+                        key={feature.title}
+                        className={`marketing-card relative flex flex-col gap-3 p-5 ${
+                          feature.highlight ? 'bg-secondary/40' : ''
+                        }`}
+                      >
+                        {feature.highlight && (
+                          <span className="absolute -top-2 right-3 rounded-xs bg-primary px-1.5 py-0.5 font-mono text-[10px] font-medium text-primary-foreground">
+                            HIGHLIGHT
+                          </span>
+                        )}
+                        <Icon className="h-5 w-5 text-foreground" />
+                        <h4 className="text-sm font-semibold">{feature.title}</h4>
+                        <p className="text-xs leading-relaxed text-muted-foreground">
+                          {feature.description}
+                        </p>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             );
           })}
+        </div>
+
+        {/* 底部统计条 — 不使用 Fraunces，用 Geist 600 + 负字距 */}
+        <div className="mt-24 grid grid-cols-2 gap-px overflow-hidden rounded-md border border-border bg-border lg:grid-cols-4">
+          {[
+            { value: '16', label: '条目类型', sub: '覆盖全部场景' },
+            { value: '80', label: '位恢复码熵', sub: '银行级强度' },
+            { value: '24h', label: '会话有效期', sub: '强制重认证' },
+            { value: '0', label: '主密码上传', sub: 'SRP 保证' },
+          ].map((stat) => (
+            <div key={stat.label} className="bg-background p-6 text-center">
+              <div className="text-4xl font-semibold tracking-tighter sm:text-5xl">
+                {stat.value}
+              </div>
+              <div className="mt-2 text-sm font-medium text-foreground">{stat.label}</div>
+              <div className="mt-1 font-mono text-xs text-muted-foreground">{stat.sub}</div>
+            </div>
+          ))}
         </div>
       </div>
     </section>

@@ -2,6 +2,11 @@ import * as React from "react"
 
 import { cn } from "@/lib/utils"
 
+/**
+ * Card — 对齐 DESIGN.md (Vercel-Inspired)
+ * - 默认 8px 圆角 (rounded-md) + Level 2 堆叠阴影 + inset 发丝边
+ * - 通过 className 覆盖为 rounded-lg（pricing/large card 12px）
+ */
 const Card = React.forwardRef<
   HTMLDivElement,
   React.HTMLAttributes<HTMLDivElement>
@@ -9,7 +14,7 @@ const Card = React.forwardRef<
   <div
     ref={ref}
     className={cn(
-      "rounded-xl border bg-card text-card-foreground shadow",
+      "rounded-md bg-card text-card-foreground shadow-stack-2",
       className
     )}
     {...props}
