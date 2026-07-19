@@ -9,6 +9,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getVerifiedSession } from '@/lib/auth-check';
 import { db } from '@/lib/db';
+import { logApiError } from '@/lib/api-log';
 import type { GetShareResponse } from '@/types/share';
 
 /**
@@ -21,8 +22,10 @@ export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ): Promise<NextResponse> {
+  let shareId: string | undefined;
   try {
     const { id } = await params;
+    shareId = id;
 
     // 先检查记录是否存在
     const existsResult = await db.query(
@@ -89,7 +92,7 @@ export async function GET(
 
     return NextResponse.json(response, { status: 200 });
   } catch (err) {
-    console.error('[share/get] 未预期错误:', err instanceof Error ? err.message : '未知错误');
+    logApiError('share/get', err, { pathParam: shareId });
     return NextResponse.json(
       { success: false, error: '服务器内部错误' },
       { status: 500 },
@@ -106,8 +109,11 @@ export async function DELETE(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ): Promise<NextResponse> {
+  let shareId: string | undefined;
+  let userId: string | undefined;
   try {
     const { id } = await params;
+    shareId = id;
 
     const session = await getVerifiedSession();
     if (!session || !session.sub) {
@@ -116,6 +122,7 @@ export async function DELETE(
         { status: 401 },
       );
     }
+    userId = session.sub;
 
     const result = await db.query(
       `DELETE FROM shared_items
@@ -132,7 +139,7 @@ export async function DELETE(
 
     return NextResponse.json({ success: true }, { status: 200 });
   } catch (err) {
-    console.error('[share/delete] 未预期错误:', err instanceof Error ? err.message : '未知错误');
+    logApiError('share/delete', err, { userId, pathParam: shareId });
     return NextResponse.json(
       { success: false, error: '服务器内部错误' },
       { status: 500 },

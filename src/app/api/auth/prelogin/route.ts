@@ -16,6 +16,8 @@ import { z } from 'zod';
 import { db } from '@/lib/db';
 import { generateKdfSalt, DEFAULT_KDF_PARAMS } from '@/lib/crypto/kdf';
 import { toBase64 } from '@/lib/crypto/encoding';
+import { logApiError } from '@/lib/api-log';
+import { checkRateLimit, getClientIp } from '@/lib/rate-limit';
 import type { PreloginResponse } from '@/types/api';
 
 const preloginSchema = z.object({
@@ -30,6 +32,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: '请求体不是合法 JSON' }, { status: 400 });
   }
 
+  let email: string | undefined;
   try {
     const parsed = preloginSchema.safeParse(body);
     if (!parsed.success) {
@@ -39,7 +42,21 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       );
     }
 
-    const emailNormalized = parsed.data.email.toLowerCase();
+    ({ email } = parsed.data);
+    const emailNormalized = email.toLowerCase();
+
+    // L6 速率限制：每 IP+email 每分钟最多 10 次（防枚举/扫描攻击）
+    const ip = getClientIp(request);
+    const limited = checkRateLimit('prelogin', ip, email, {
+      windowMs: 60_000,
+      max: 10,
+    });
+    if (!limited.ok) {
+      return NextResponse.json(
+        { error: '请求过于频繁，请稍后重试', code: 'RATE_LIMITED' },
+        { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
+      );
+    }
 
     // 查询用户 KDF 参数 + SRP salt
     const result = await db.query(
@@ -72,7 +89,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json(response, { status: 200 });
   } catch (err) {
     // M-6：兜底未预期异常，避免泄漏内部错误细节
-    console.error('[prelogin] 未预期错误:', err instanceof Error ? err.message : '未知错误');
+    logApiError('prelogin', err, { email });
     return NextResponse.json(
       { error: '服务器内部错误', code: 'INTERNAL_ERROR' },
       { status: 500 },

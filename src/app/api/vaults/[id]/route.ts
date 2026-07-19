@@ -10,6 +10,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { getVerifiedSession } from '@/lib/auth-check';
 import { db } from '@/lib/db';
+import { logApiError } from '@/lib/api-log';
 
 const updateSchema = z.object({
   travelSafe: z.boolean(),
@@ -35,8 +36,11 @@ export async function PATCH(
     );
   }
 
+  let userId: string | undefined;
+  let vaultId: string | undefined;
   try {
     const { id } = await params;
+    vaultId = id;
 
     const session = await getVerifiedSession();
     if (!session || !session.sub) {
@@ -45,7 +49,7 @@ export async function PATCH(
         { status: 401 },
       );
     }
-    const userId = session.sub;
+    userId = session.sub;
 
     const parsed = updateSchema.safeParse(body);
     if (!parsed.success) {
@@ -60,7 +64,7 @@ export async function PATCH(
     // 验证保险库属于当前用户并更新
     const result = await db.query(
       'UPDATE vaults SET travel_safe = $1 WHERE id = $2 AND user_id = $3 RETURNING id',
-      [travelSafe, id, userId],
+      [travelSafe, vaultId, userId],
     );
 
     if (result.rows.length === 0) {
@@ -72,10 +76,7 @@ export async function PATCH(
 
     return NextResponse.json({ success: true }, { status: 200 });
   } catch (err) {
-    console.error(
-      '[vaults/update-travel-safe] 未预期错误:',
-      err instanceof Error ? err.message : '未知错误',
-    );
+    logApiError('vaults/update-travel-safe', err, { userId, pathParam: vaultId });
     return NextResponse.json(
       { success: false, error: '服务器内部错误' },
       { status: 500 },

@@ -27,6 +27,8 @@ import {
   SESSION_COOKIE_OPTIONS,
 } from '@/lib/session';
 import { createTicket } from '@/lib/2fa-ticket';
+import { logApiError } from '@/lib/api-log';
+import { checkRateLimit, getClientIp } from '@/lib/rate-limit';
 import type {
   SrpVerifyResponse,
   TotpChallengeResponse,
@@ -56,6 +58,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: '请求体不是合法 JSON' }, { status: 400 });
   }
 
+  let email: string | undefined;
   try {
     const parsed = verifySchema.safeParse(body);
     if (!parsed.success) {
@@ -65,8 +68,22 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       );
     }
 
-    const { email, clientPublicEphemeral, clientSessionProof } = parsed.data;
+    ({ email } = parsed.data);
+    const { clientPublicEphemeral, clientSessionProof } = parsed.data;
     const emailNormalized = email.toLowerCase();
+
+    // L6 速率限制：每 IP+email 每分钟最多 10 次（与账户锁定互补防撞库）
+    const ip = getClientIp(request);
+    const limited = checkRateLimit('srp/verify', ip, email, {
+      windowMs: 60_000,
+      max: 10,
+    });
+    if (!limited.ok) {
+      return NextResponse.json(
+        { error: '请求过于频繁，请稍后重试', code: 'RATE_LIMITED' },
+        { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
+      );
+    }
 
     // 查询用户
     const result = await db.query(
@@ -227,7 +244,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     res.cookies.set(SESSION_COOKIE_NAME, token, SESSION_COOKIE_OPTIONS);
     return res;
   } catch (err) {
-    console.error('[srp/verify] 未预期错误:', err);
+    logApiError('srp/verify', err, { email });
     return NextResponse.json(
       { error: '服务器内部错误', code: 'INTERNAL_ERROR' },
       { status: 500 },

@@ -16,6 +16,7 @@ import { z } from 'zod';
 import bcrypt from 'bcrypt';
 import { getVerifiedSession } from '@/lib/auth-check';
 import { db } from '@/lib/db';
+import { logApiError } from '@/lib/api-log';
 
 const updateSchema = z.object({
   authHash: z.string().min(1, 'authHash 不能为空'),
@@ -28,6 +29,7 @@ const updateSchema = z.object({
  * 响应：200 { travelMode: boolean }
  */
 export async function GET(): Promise<NextResponse> {
+  let userId: string | undefined;
   try {
     const session = await getVerifiedSession();
     if (!session || !session.sub) {
@@ -36,10 +38,11 @@ export async function GET(): Promise<NextResponse> {
         { status: 401 },
       );
     }
+    userId = session.sub;
 
     const result = await db.query(
       'SELECT travel_mode FROM users WHERE id = $1',
-      [session.sub],
+      [userId],
     );
 
     if (result.rows.length === 0) {
@@ -54,10 +57,7 @@ export async function GET(): Promise<NextResponse> {
       { status: 200 },
     );
   } catch (err) {
-    console.error(
-      '[travel-mode/get] 未预期错误:',
-      err instanceof Error ? err.message : '未知错误',
-    );
+    logApiError('travel-mode/get', err, { userId });
     return NextResponse.json(
       { success: false, error: '服务器内部错误' },
       { status: 500 },
@@ -83,6 +83,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     );
   }
 
+  let userId: string | undefined;
   try {
     const session = await getVerifiedSession();
     if (!session || !session.sub) {
@@ -91,7 +92,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         { status: 401 },
       );
     }
-    const userId = session.sub;
+    userId = session.sub;
 
     const parsed = updateSchema.safeParse(body);
     if (!parsed.success) {
@@ -139,10 +140,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       { status: 200 },
     );
   } catch (err) {
-    console.error(
-      '[travel-mode/post] 未预期错误:',
-      err instanceof Error ? err.message : '未知错误',
-    );
+    logApiError('travel-mode/post', err, { userId });
     return NextResponse.json(
       { success: false, error: '服务器内部错误' },
       { status: 500 },

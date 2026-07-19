@@ -28,6 +28,8 @@ import {
 } from '@/lib/session';
 import { isValidRecoveryCodeFormat } from '@/lib/recovery-code';
 import { encryptedDataSchema, kdfParamsSchema, kdfSaltSchema } from '@/lib/schemas';
+import { logApiError } from '@/lib/api-log';
+import { checkRateLimit, getClientIp } from '@/lib/rate-limit';
 import type { RegisterResponse } from '@/types/api';
 import { generateSalt, derivePrivateKey, deriveVerifier } from 'secure-remote-password/client';
 
@@ -79,7 +81,6 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
 
   const {
-    email,
     authHash,
     encryptedKey,
     kdfSalt,
@@ -87,9 +88,23 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     recoveryCode,
     recoveryEncryptedKey,
     defaultVaultNameEncrypted,
+    email,
   } = parsed.data;
 
   const emailNormalized = normalizeEmail(email);
+
+  // L6 速率限制：每 IP+email 每分钟最多 5 次（注册比登录更敏感，阈值更严）
+  const ip = getClientIp(request);
+  const limited = checkRateLimit('register', ip, email, {
+    windowMs: 60_000,
+    max: 5,
+  });
+  if (!limited.ok) {
+    return NextResponse.json(
+      { error: '请求过于频繁，请稍后重试', code: 'RATE_LIMITED' },
+      { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
+    );
+  }
 
   // 2. bcrypt 哈希 authHash 与 recoveryCode（在事务外计算，减少事务持有时长）
   const passwordHash = await bcrypt.hash(authHash, BCRYPT_COST);
@@ -182,7 +197,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       // 回滚失败忽略，记录通用错误（不记录敏感信息 SEC-10）
     }
     // 仅记录通用错误信息，不泄露 authHash / recoveryCode 等敏感内容
-    console.error('注册失败：', err instanceof Error ? err.message : '未知错误');
+    logApiError('auth/register', err, { email });
     return NextResponse.json(
       { error: '注册失败，请稍后重试', code: 'INTERNAL_ERROR' },
       { status: 500 },

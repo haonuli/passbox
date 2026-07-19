@@ -18,6 +18,7 @@ import { randomBytes } from 'crypto';
 import { Secret, TOTP } from 'otpauth';
 import { getVerifiedSession } from '@/lib/auth-check';
 import { db } from '@/lib/db';
+import { logApiError } from '@/lib/api-log';
 
 /** 备用码字符集（大写字母 + 数字） */
 const BACKUP_CODE_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
@@ -54,6 +55,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     );
   }
 
+  let userId: string | undefined;
   try {
     const parsed = enableSchema.safeParse(body);
     if (!parsed.success) {
@@ -72,11 +74,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         { status: 401 },
       );
     }
+    userId = session.sub;
 
     // 检查是否已开启 2FA
     const userResult = await db.query(
       'SELECT two_factor_enabled FROM users WHERE id = $1',
-      [session.sub],
+      [userId],
     );
 
     if (userResult.rows.length === 0) {
@@ -131,7 +134,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
            two_factor_backup_codes = $2,
            updated_at = NOW()
        WHERE id = $3`,
-      [secret, hashedCodes, session.sub],
+      [secret, hashedCodes, userId],
     );
 
     return NextResponse.json({
@@ -139,7 +142,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       backupCodes,
     });
   } catch (err) {
-    console.error('[2fa/enable] 未预期错误:', err instanceof Error ? err.message : '未知错误');
+    logApiError('2fa/enable', err, { userId });
     return NextResponse.json(
       { success: false, error: '服务器内部错误' },
       { status: 500 },

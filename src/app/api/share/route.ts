@@ -10,6 +10,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { getVerifiedSession } from '@/lib/auth-check';
 import { db } from '@/lib/db';
+import { logApiError } from '@/lib/api-log';
 import type { CreateShareRequest, CreateShareResponse, ShareListItem } from '@/types/share';
 
 const createShareSchema = z.object({
@@ -37,6 +38,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     );
   }
 
+  let userId: string | undefined;
   try {
     const session = await getVerifiedSession();
     if (!session || !session.sub) {
@@ -45,6 +47,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         { status: 401 },
       );
     }
+    userId = session.sub;
 
     const parsed = createShareSchema.safeParse(body);
     if (!parsed.success) {
@@ -64,7 +67,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
          (user_id, item_title_encrypted, item_data_encrypted, item_type_code, expires_at, max_views)
        VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING id`,
-      [session.sub, encryptedTitle, encryptedData, itemTypeCode, expiresAt, maxViews ?? null],
+      [userId, encryptedTitle, encryptedData, itemTypeCode, expiresAt, maxViews ?? null],
     );
 
     const id = result.rows[0].id as string;
@@ -72,7 +75,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
     return NextResponse.json(response, { status: 201 });
   } catch (err) {
-    console.error('[share/create] 未预期错误:', err instanceof Error ? err.message : '未知错误');
+    logApiError('share/create', err, { userId });
     return NextResponse.json(
       { success: false, error: '服务器内部错误' },
       { status: 500 },
@@ -86,6 +89,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
  * 响应：200 ShareListItem[]
  */
 export async function GET(): Promise<NextResponse> {
+  let userId: string | undefined;
   try {
     const session = await getVerifiedSession();
     if (!session || !session.sub) {
@@ -94,13 +98,14 @@ export async function GET(): Promise<NextResponse> {
         { status: 401 },
       );
     }
+    userId = session.sub;
 
     const result = await db.query(
       `SELECT id, item_type_code, created_at, expires_at, max_views, view_count
        FROM shared_items
        WHERE user_id = $1
        ORDER BY created_at DESC`,
-      [session.sub],
+      [userId],
     );
 
     const now = Date.now();
@@ -119,7 +124,7 @@ export async function GET(): Promise<NextResponse> {
 
     return NextResponse.json(items, { status: 200 });
   } catch (err) {
-    console.error('[share/list] 未预期错误:', err instanceof Error ? err.message : '未知错误');
+    logApiError('share/list', err, { userId });
     return NextResponse.json(
       { success: false, error: '服务器内部错误' },
       { status: 500 },

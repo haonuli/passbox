@@ -15,6 +15,7 @@ import { z } from 'zod';
 import bcrypt from 'bcrypt';
 import { getVerifiedSession } from '@/lib/auth-check';
 import { db } from '@/lib/db';
+import { logApiError } from '@/lib/api-log';
 
 const disableSchema = z.object({
   password: z.string().min(1, '主密码不能为空'),
@@ -31,6 +32,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     );
   }
 
+  let userId: string | undefined;
   try {
     const parsed = disableSchema.safeParse(body);
     if (!parsed.success) {
@@ -49,11 +51,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         { status: 401 },
       );
     }
+    userId = session.sub;
 
     // 获取用户 password_hash
     const result = await db.query(
       'SELECT password_hash, two_factor_enabled FROM users WHERE id = $1',
-      [session.sub],
+      [userId],
     );
 
     if (result.rows.length === 0) {
@@ -82,12 +85,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
            two_factor_backup_codes = NULL,
            updated_at = NOW()
        WHERE id = $1`,
-      [session.sub],
+      [userId],
     );
 
     return NextResponse.json({ success: true });
   } catch (err) {
-    console.error('[2fa/disable] 未预期错误:', err instanceof Error ? err.message : '未知错误');
+    logApiError('2fa/disable', err, { userId });
     return NextResponse.json(
       { success: false, error: '服务器内部错误' },
       { status: 500 },

@@ -11,6 +11,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { SESSION_COOKIE_NAME, SESSION_COOKIE_OPTIONS, verifySession } from '@/lib/session';
 import { revokeAllUserSessions } from '@/lib/auth-check';
+import { logApiError } from '@/lib/api-log';
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
   // M-9：递增 token_version，使该用户所有已签发 JWT 立即失效
@@ -23,7 +24,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       await revokeAllUserSessions(payload.sub);
     } catch (err) {
       // 撤销失败不阻断登出流程（Cookie 仍清除），仅记录
-      console.error('[logout] 撤销 token_version 失败:', err instanceof Error ? err.message : '未知错误');
+      logApiError('logout', err, { userId: payload.sub });
     }
   }
 

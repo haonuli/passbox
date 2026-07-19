@@ -32,6 +32,7 @@ import {
 } from '@/lib/session';
 import { verifyTicket, consumeTicket } from '@/lib/2fa-ticket';
 import { TOTP_PERIOD, TOTP_DIGITS } from '@/lib/crypto/totp';
+import { logApiError } from '@/lib/api-log';
 import type { LoginResponse } from '@/types/api';
 import type { EncryptedData } from '@/types/crypto';
 
@@ -53,6 +54,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
 
   let parsed: ReturnType<typeof verifySchema.safeParse>;
+  let userId: string | undefined;
   try {
     parsed = verifySchema.safeParse(body);
     if (!parsed.success) {
@@ -65,13 +67,14 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const { ticket, code, useBackupCode } = parsed.data;
 
     // 1. 验证 ticket，获取 userId
-    const userId = await verifyTicket(ticket);
-    if (!userId) {
+    const verifiedUserId = await verifyTicket(ticket);
+    if (!verifiedUserId) {
       return NextResponse.json(
         { error: '验证会话已过期，请重新登录', code: 'TICKET_EXPIRED' },
         { status: 401 },
       );
     }
+    userId = verifiedUserId;
 
     // 2. 查询用户的 2FA 密钥、备用码及登录所需数据
     const result = await db.query(
@@ -185,7 +188,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     res.cookies.set(SESSION_COOKIE_NAME, token, SESSION_COOKIE_OPTIONS);
     return res;
   } catch (err) {
-    console.error('[2fa-verify] 未预期错误:', err);
+    logApiError('2fa/verify', err, { userId });
     return NextResponse.json(
       { error: '服务器内部错误', code: 'INTERNAL_ERROR' },
       { status: 500 },

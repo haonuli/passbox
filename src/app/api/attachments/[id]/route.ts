@@ -10,6 +10,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getVerifiedSession } from '@/lib/auth-check';
 import { db } from '@/lib/db';
+import { logApiError } from '@/lib/api-log';
 import type { EncryptedData } from '@/types/crypto';
 
 interface GetAttachmentResponse {
@@ -31,8 +32,11 @@ export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ): Promise<NextResponse> {
+  let attachmentId: string | undefined;
+  let userId: string | undefined;
   try {
     const { id } = await params;
+    attachmentId = id;
 
     const session = await getVerifiedSession();
     if (!session || !session.sub) {
@@ -41,7 +45,7 @@ export async function GET(
         { status: 401 },
       );
     }
-    const userId = session.sub;
+    userId = session.sub;
 
     const result = await db.query(
       `SELECT id, item_id, filename_encrypted, mime_type_encrypted, file_size, data_encrypted, created_at
@@ -70,7 +74,7 @@ export async function GET(
 
     return NextResponse.json(response, { status: 200 });
   } catch (err) {
-    console.error('[attachments/get] 未预期错误:', err instanceof Error ? err.message : '未知错误');
+    logApiError('attachments/get', err, { userId, pathParam: attachmentId });
     return NextResponse.json(
       { success: false, error: '服务器内部错误' },
       { status: 500 },
@@ -87,8 +91,11 @@ export async function DELETE(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ): Promise<NextResponse> {
+  let attachmentId: string | undefined;
+  let userId: string | undefined;
   try {
     const { id } = await params;
+    attachmentId = id;
 
     const session = await getVerifiedSession();
     if (!session || !session.sub) {
@@ -97,7 +104,7 @@ export async function DELETE(
         { status: 401 },
       );
     }
-    const userId = session.sub;
+    userId = session.sub;
 
     const result = await db.query(
       `DELETE FROM item_attachments WHERE id = $1 AND user_id = $2`,
@@ -113,7 +120,7 @@ export async function DELETE(
 
     return NextResponse.json({ success: true }, { status: 200 });
   } catch (err) {
-    console.error('[attachments/delete] 未预期错误:', err instanceof Error ? err.message : '未知错误');
+    logApiError('attachments/delete', err, { userId, pathParam: attachmentId });
     return NextResponse.json(
       { success: false, error: '服务器内部错误' },
       { status: 500 },

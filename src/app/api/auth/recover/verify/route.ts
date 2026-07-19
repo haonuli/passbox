@@ -19,6 +19,8 @@ import { z } from 'zod';
 import bcrypt from 'bcrypt';
 import { db } from '@/lib/db';
 import { isValidRecoveryCodeFormat } from '@/lib/recovery-code';
+import { logApiError } from '@/lib/api-log';
+import { checkRateLimit, getClientIp } from '@/lib/rate-limit';
 import type { RecoverVerifyResponse } from '@/types/api';
 import type { EncryptedData } from '@/types/crypto';
 
@@ -44,6 +46,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: '请求体不是合法 JSON' }, { status: 400 });
   }
 
+  let email: string | undefined;
   try {
     const parsed = verifySchema.safeParse(body);
     if (!parsed.success) {
@@ -53,8 +56,22 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       );
     }
 
-    const { email, recoveryCode } = parsed.data;
+    const { recoveryCode } = parsed.data;
+    ({ email } = parsed.data);
     const emailNormalized = email.toLowerCase();
+
+    // L6 速率限制：每 IP+email 每分钟最多 5 次（恢复码验证敏感度高，阈值更严）
+    const ip = getClientIp(request);
+    const limited = checkRateLimit('recover/verify', ip, email, {
+      windowMs: 60_000,
+      max: 5,
+    });
+    if (!limited.ok) {
+      return NextResponse.json(
+        { error: '请求过于频繁，请稍后重试', code: 'RATE_LIMITED' },
+        { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
+      );
+    }
 
     const result = await db.query(
       'SELECT id, email, recovery_code_hash, recovery_encrypted_key FROM users WHERE email_normalized = $1',
@@ -91,7 +108,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json(response, { status: 200 });
   } catch (err) {
     // M-6：兜底未预期异常，避免泄漏内部错误细节
-    console.error('[recover/verify] 未预期错误:', err instanceof Error ? err.message : '未知错误');
+    logApiError('recover/verify', err, { email });
     return NextResponse.json(
       { error: '服务器内部错误', code: 'INTERNAL_ERROR' },
       { status: 500 },

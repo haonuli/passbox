@@ -8,6 +8,7 @@
 import { NextResponse } from 'next/server';
 import { getVerifiedSession } from '@/lib/auth-check';
 import { db } from '@/lib/db';
+import { logApiError } from '@/lib/api-log';
 import type { EncryptedData } from '@/types/crypto';
 
 interface VaultResponse {
@@ -34,6 +35,7 @@ interface VaultResponse {
  * 在数据库中以 JSON 字符串形式存储，此处 JSON.parse 后返回。
  */
 export async function GET(): Promise<NextResponse> {
+  let userId: string | undefined;
   try {
     const session = await getVerifiedSession();
     if (!session || !session.sub) {
@@ -42,7 +44,7 @@ export async function GET(): Promise<NextResponse> {
         { status: 401 },
       );
     }
-    const userId = session.sub;
+    userId = session.sub;
 
     // 查询用户的旅行模式状态
     const userResult = await db.query(
@@ -108,7 +110,7 @@ export async function GET(): Promise<NextResponse> {
     const response: VaultResponse = { vaults, items, tags, itemTypes };
     return NextResponse.json(response, { status: 200 });
   } catch (err) {
-    console.error('[vault/list] 未预期错误:', err instanceof Error ? err.message : '未知错误');
+    logApiError('vault/list', err, { userId });
     return NextResponse.json(
       { success: false, error: '服务器内部错误' },
       { status: 500 },

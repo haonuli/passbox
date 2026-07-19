@@ -10,27 +10,14 @@
  * - 文件名、MIME 类型、文件数据均在客户端加密后上传
  */
 import { NextRequest, NextResponse } from 'next/server';
-import { z } from 'zod';
 import { getVerifiedSession } from '@/lib/auth-check';
 import { db } from '@/lib/db';
-
-/** 单个附件最大字节数（5MB） */
-const MAX_FILE_SIZE = 5 * 1024 * 1024;
-/** 每个条目最多附件数量 */
-const MAX_ATTACHMENTS_PER_ITEM = 10;
-
-const encryptedDataSchema = z.object({
-  v: z.literal(1),
-  iv: z.string().min(1),
-  ct: z.string().min(1),
-});
-
-const createAttachmentSchema = z.object({
-  filenameEncrypted: encryptedDataSchema,
-  mimeTypeEncrypted: encryptedDataSchema,
-  fileSize: z.number().int().positive().max(MAX_FILE_SIZE, '文件大小不能超过 5MB'),
-  dataEncrypted: encryptedDataSchema,
-});
+import { logApiError } from '@/lib/api-log';
+import {
+  createAttachmentSchema,
+  MAX_ATTACHMENTS_PER_ITEM,
+  uuidSchema,
+} from '@/lib/schemas';
 
 interface CreateAttachmentResponse {
   id: string;
@@ -62,8 +49,20 @@ export async function POST(
     );
   }
 
+  let userId: string | undefined;
+  let itemId: string | undefined;
   try {
-    const { id: itemId } = await params;
+    const { id } = await params;
+    itemId = id;
+
+    // 校验路径 itemId 为合法 UUID
+    const idResult = uuidSchema.safeParse(itemId);
+    if (!idResult.success) {
+      return NextResponse.json(
+        { success: false, error: '条目 ID 格式无效' },
+        { status: 400 },
+      );
+    }
 
     const session = await getVerifiedSession();
     if (!session || !session.sub) {
@@ -72,7 +71,7 @@ export async function POST(
         { status: 401 },
       );
     }
-    const userId = session.sub;
+    userId = session.sub;
 
     const parsed = createAttachmentSchema.safeParse(body);
     if (!parsed.success) {
@@ -130,7 +129,7 @@ export async function POST(
 
     return NextResponse.json(response, { status: 201 });
   } catch (err) {
-    console.error('[attachments/create] 未预期错误:', err instanceof Error ? err.message : '未知错误');
+    logApiError('attachments/create', err, { userId, pathParam: itemId });
     return NextResponse.json(
       { success: false, error: '服务器内部错误' },
       { status: 500 },
@@ -147,8 +146,11 @@ export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ): Promise<NextResponse> {
+  let userId: string | undefined;
+  let itemId: string | undefined;
   try {
-    const { id: itemId } = await params;
+    const { id } = await params;
+    itemId = id;
 
     const session = await getVerifiedSession();
     if (!session || !session.sub) {
@@ -157,7 +159,7 @@ export async function GET(
         { status: 401 },
       );
     }
-    const userId = session.sub;
+    userId = session.sub;
 
     const result = await db.query(
       `SELECT id, file_size, created_at
@@ -175,7 +177,7 @@ export async function GET(
 
     return NextResponse.json(items, { status: 200 });
   } catch (err) {
-    console.error('[attachments/list] 未预期错误:', err instanceof Error ? err.message : '未知错误');
+    logApiError('attachments/list', err, { userId, pathParam: itemId });
     return NextResponse.json(
       { success: false, error: '服务器内部错误' },
       { status: 500 },

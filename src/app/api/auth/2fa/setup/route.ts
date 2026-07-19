@@ -12,8 +12,10 @@ import { NextResponse } from 'next/server';
 import { Secret, TOTP } from 'otpauth';
 import { getVerifiedSession } from '@/lib/auth-check';
 import { db } from '@/lib/db';
+import { logApiError } from '@/lib/api-log';
 
 export async function POST(): Promise<NextResponse> {
+  let userId: string | undefined;
   try {
     const session = await getVerifiedSession();
     if (!session || !session.sub) {
@@ -22,10 +24,11 @@ export async function POST(): Promise<NextResponse> {
         { status: 401 },
       );
     }
+    userId = session.sub;
 
     const result = await db.query(
       'SELECT email, two_factor_enabled FROM users WHERE id = $1',
-      [session.sub],
+      [userId],
     );
 
     if (result.rows.length === 0) {
@@ -63,7 +66,7 @@ export async function POST(): Promise<NextResponse> {
       otpauthUrl: totp.toString(),
     });
   } catch (err) {
-    console.error('[2fa/setup] 未预期错误:', err instanceof Error ? err.message : '未知错误');
+    logApiError('2fa/setup', err, { userId });
     return NextResponse.json(
       { success: false, error: '服务器内部错误' },
       { status: 500 },

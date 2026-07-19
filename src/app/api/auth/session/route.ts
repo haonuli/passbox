@@ -15,10 +15,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { verifySession, SESSION_COOKIE_NAME } from '@/lib/session';
 import { verifyTokenVersion } from '@/lib/auth-check';
+import { logApiError } from '@/lib/api-log';
 import type { SessionResponse } from '@/types/api';
 import type { EncryptedData } from '@/types/crypto';
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
+  let userId: string | undefined;
   try {
     // 从请求 Cookie 读取 JWT 并验签
     const token = request.cookies.get(SESSION_COOKIE_NAME)?.value;
@@ -31,7 +33,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       );
     }
 
-    const userId = payload.sub;
+    userId = payload.sub;
 
     // M-9：校验 token_version，登出 / 改密后旧 JWT 即使签名有效也拒绝
     const tokenValid = await verifyTokenVersion(userId, payload.ver);
@@ -76,7 +78,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json(response, { status: 200 });
   } catch (err) {
     // M-6：兜底未预期异常，避免泄漏内部错误细节
-    console.error('[session] 未预期错误:', err instanceof Error ? err.message : '未知错误');
+    logApiError('auth/session', err, { userId });
     return NextResponse.json(
       { error: '服务器内部错误', code: 'INTERNAL_ERROR' },
       { status: 500 },

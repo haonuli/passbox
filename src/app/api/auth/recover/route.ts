@@ -30,6 +30,8 @@ import {
   SESSION_COOKIE_NAME,
   SESSION_COOKIE_OPTIONS,
 } from '@/lib/session';
+import { logApiError } from '@/lib/api-log';
+import { checkRateLimit, getClientIp } from '@/lib/rate-limit';
 import type { RecoverResponse } from '@/types/api';
 
 /** 防枚举用的 dummy bcrypt 哈希（模块加载时生成一次） */
@@ -70,6 +72,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: '请求体不是合法 JSON' }, { status: 400 });
   }
 
+  let email: string | undefined;
   try {
     const parsed = recoverSchema.safeParse(body);
     if (!parsed.success) {
@@ -80,7 +83,6 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
 
     const {
-      email,
       recoveryCode,
       newAuthHash,
       newEncryptedKey,
@@ -89,7 +91,21 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       newRecoveryCode,
       newRecoveryEncryptedKey,
     } = parsed.data;
+    ({ email } = parsed.data);
     const emailNormalized = email.toLowerCase();
+
+    // L6 速率限制：每 IP+email 每分钟最多 5 次（密码重置敏感度高）
+    const ip = getClientIp(request);
+    const limited = checkRateLimit('recover', ip, email, {
+      windowMs: 60_000,
+      max: 5,
+    });
+    if (!limited.ok) {
+      return NextResponse.json(
+        { error: '请求过于频繁，请稍后重试', code: 'RATE_LIMITED' },
+        { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } },
+      );
+    }
 
     const result = await db.query(
       'SELECT id, email, recovery_code_hash FROM users WHERE email_normalized = $1',
@@ -161,7 +177,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return res;
   } catch (err) {
     // M-6：兜底未预期异常，避免泄漏内部错误细节
-    console.error('[recover] 未预期错误:', err instanceof Error ? err.message : '未知错误');
+    logApiError('recover', err, { email });
     return NextResponse.json(
       { error: '服务器内部错误', code: 'INTERNAL_ERROR' },
       { status: 500 },
